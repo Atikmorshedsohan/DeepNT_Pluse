@@ -53,7 +53,7 @@ class DeepNTPlus(nn.Module):
         nn.init.zeros_(self.res_head[-1].bias)
         self.alpha_raw = nn.Parameter(torch.tensor(math.log(math.e ** 10 - 1)))          # ridge strength, starts at 10
         self.gate = nn.Sequential(nn.Linear(3, 16), nn.ReLU(), nn.Linear(16, 1))
-        nn.init.constant_(self.gate[-1].bias, 1.0)                                       # warm start: lean on the convex estimate
+        nn.init.constant_(self.gate[-1].bias, -2.0)                                      # anchor on convex estimate (residual form)
         self.var_head = nn.Sequential(nn.Linear(2 * d + 1, d), nn.ReLU(), nn.Linear(d, 1)) if cfg.uncertainty else None
         self.loss_head = nn.Sequential(nn.Linear(2 * d, d), nn.ReLU(), nn.Linear(d, 1)) if cfg.has_loss else None
 
@@ -96,7 +96,9 @@ class DeepNTPlus(nn.Module):
         lam, y_c = torch.zeros(n_t), y_g
         if cfg.convex and cfg.tomography and n_ctx:
             Ac = torch.cat([A[ctx], torch.ones(n_ctx, 1)], 1)
-            x0 = torch.cat([x_e, b.view(1)])
+            ctx_rate = (y_ctx / g.hops[ctx].clamp(min=1.0)).median().clamp(min=0.1)
+            scale = (ctx_rate / self.prior_edge_ms).clamp(0.2, 5.0)
+            x0 = torch.cat([x_e * scale, b.view(1)])
             alpha = F.softplus(self.alpha_raw) + 1e-3
             resid = y_ctx - Ac @ x0
             K = Ac @ Ac.T + alpha * torch.eye(n_ctx)
@@ -104,8 +106,11 @@ class DeepNTPlus(nn.Module):
             y_c = torch.cat([A[tgt], torch.ones(n_t, 1)], 1) @ x_ref
             rel = (resid.abs() / y_ctx.clamp(min=1)).mean()
             gate_in = torch.stack([cov_p, torch.full((n_t,), math.log1p(n_ctx) / 5), rel.expand(n_t)], -1)
-            lam = torch.sigmoid(self.gate(gate_in).squeeze(-1))
-        y_hat = lam * y_c + (1 - lam) * y_g
+            g_res = torch.sigmoid(self.gate(gate_in).squeeze(-1))
+            lam = 1.0 - g_res
+            y_hat = y_c + g_res * (y_g - y_c)
+        else:
+            y_hat = y_g
 
         out = {'y_hat': y_hat, 'mu_z': self.z_of(y_hat.clamp(min=0)), 'y_gnn': y_g, 'y_convex': y_c, 'lam': lam,
                'cov': cov_p, 'y_add_ctx': (A[ctx] @ x_e + b) if n_ctx else torch.zeros(0), 'logvar': None,

@@ -85,22 +85,29 @@ def run_structural_baselines(graphs, seed=0):
     return pd.concat(frames, ignore_index=True)
 
 
-def convex_tomography(g, alpha, edge_ms, intercept=0.0):
+def convex_tomography(g, alpha, edge_ms=None, intercept=0.0):
     """Classical tomography: min ||A x - y||^2 + alpha ||x - x0||^2, x >= 0 (x0 = constant per-edge prior),
     fitted on the observed paths of this graph and applied to the hidden ones."""
     ctx, tgt = eval_episode(g)
     A = g.A.numpy()
     Ac = np.hstack([A[ctx.numpy()], np.ones((len(ctx), 1))])
+    if edge_ms is None:
+        ctx_m = g.observed & g.ok
+        edge_ms = float(np.median((g.y[ctx_m] / g.hops[ctx_m]).numpy()))
     x0 = np.concatenate([np.full(A.shape[1], edge_ms), [intercept]])
     resid = g.y[ctx].numpy() - Ac @ x0
     x = np.clip(x0 + Ac.T @ np.linalg.solve(Ac @ Ac.T + alpha * np.eye(len(ctx)), resid), 0, None)
     return tgt.tolist(), np.hstack([A[tgt.numpy()], np.ones((len(tgt), 1))]) @ x
 
 
-def run_convex_baseline(graphs, norm, alphas=(0.1, 1, 10, 100, 1000)):
+def run_convex_baseline(graphs, norm=None, alphas=(0.1, 1, 10, 100, 1000), warm_start=True):
     def frames_for(split, alpha):
-        return [_frame(g, *convex_tomography(g, alpha, norm['prior_edge_ms']), 'Convex tomography (classical)')
-                for g in graphs.values() if g.split == split]
+        res = []
+        for g in graphs.values():
+            if g.split == split:
+                prior = None if warm_start else (norm['prior_edge_ms'] if norm else None)
+                res.append(_frame(g, *convex_tomography(g, alpha, prior), 'Convex tomography (classical)'))
+        return res
     val_mae = {a: np.mean(np.abs(np.concatenate([(f['y_pred'] - f['y_true']).to_numpy() for f in frames_for('val', a)])))
                for a in alphas}
     best = min(val_mae, key=val_mae.get)

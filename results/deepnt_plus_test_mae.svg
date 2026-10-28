@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="650" viewBox="0 0 1100 650" role="img" aria-labelledby="title desc">
+  <title id="title">DeepNT+ test MAE comparison</title>
+  <desc id="desc">Lower test MAE in milliseconds is better. Classical convex tomography is 44.202, DeepNT static is 49.047, and DeepNT+ full is 62.622.</desc>
+  <rect width="1100" height="650" fill="#ffffff"/>
+  <text x="550" y="48" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#172033">Test MAE Comparison</text>
+  <text x="550" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#536174">Lower is better (milliseconds)</text>
+  <line x1="250" y1="550" x2="1010" y2="550" stroke="#334155" stroke-width="2"/>
+  <line x1="250" y1="120" x2="250" y2="550" stroke="#334155" stroke-width="2"/>
+  <g font-family="Arial, sans-serif" font-size="14" fill="#536174" text-anchor="middle">
+    <line x1="250" y1="550" x2="250" y2="558" stroke="#334155"/><text x="250" y="580">0</text>
+    <line x1="402" y1="550" x2="402" y2="558" stroke="#334155"/><text x="402" y="580">20</text>
+    <line x1="554" y1="550" x2="554" y2="558" stroke="#334155"/><text x="554" y="580">40</text>
+    <line x1="706" y1="550" x2="706" y2="558" stroke="#334155"/><text x="706" y="580">60</text>
+    <line x1="858" y1="550" x2="858" y2="558" stroke="#334155"/><text x="858" y="580">80</text>
+    <line x1="1010" y1="550" x2="1010" y2="558" stroke="#334155"/><text x="1010" y="580">100</text>
+  </g>
+  <g stroke="#e2e8f0" stroke-width="1">
+    <line x1="402" y1="120" x2="402" y2="550"/><line x1="554" y1="120" x2="554" y2="550"/>
+    <line x1="706" y1="120" x2="706" y2="550"/><line x1="858" y1="120" x2="858" y2="550"/>
+    <line x1="1010" y1="120" x2="1010" y2="550"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="18" fill="#172033" text-anchor="end">
+    <text x="235" y="205">Classical convex tomography</text>
+    <text x="235" y="335">DeepNT static</text>
+    <text x="235" y="465">DeepNT+ full</text>
+  </g>
+  <rect x="250" y="170" width="335.9" height="58" rx="8" fill="#2563eb"/>
+  <rect x="250" y="300" width="372.8" height="58" rx="8" fill="#16a34a"/>
+  <rect x="250" y="430" width="475.9" height="58" rx="8" fill="#f97316"/>
+  <g font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#172033">
+    <text x="602" y="207">44.202 ms</text>
+    <text x="639" y="337">49.047 ms</text>
+    <text x="741" y="467">62.622 ms</text>
+  </g>
+  <text x="630" y="620" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#64748b">Recorded exploratory test run (run_02)</text>
+</svg>

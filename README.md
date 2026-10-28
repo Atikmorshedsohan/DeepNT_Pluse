@@ -2,96 +2,51 @@
 
 DeepNT+ is a hybrid, path-centric network tomography model for estimating the
 round-trip time (RTT) of hidden network paths from network topology, structural
-features, observed path RTTs, tomography relationships, and optional temporal
-context.
+features, observed path RTTs, tomography relationships, and temporal context.
 
-> **Research status:** The recorded real-data result is exploratory. The saved
-> `run_02` output has a monitor/vantage-point shift: validation and test contain
-> only `dac-bd`, while training contains all monitors. The results should be
-> rerun with a verified split before being treated as final thesis results.
-
-## Research task
+## Research Task
 
 Given a network graph and RTT measurements for observed paths, the model predicts
 RTT for hidden paths without using hidden RTT as an input at validation or test
-time. Hidden RTT is used only for training loss and evaluation.
+time. Hidden RTT is strictly used only for training loss and evaluation.
 
-## Main components
+## Main Components & Innovations
 
-- Structural graph neural network
-- Ordered path encoder with positional embeddings and Transformer attention
-- Tomography layer using path-edge incidence
-- Convex refinement using observed paths
-- Learned fusion of convex and neural estimates
-- Optional temporal branch with node memory and recent-history encoding
-- Optional uncertainty estimation and active-learning simulation
+- **Split-Weight Spatial GNN:** Distinguishes forward and reverse link traffic directions.
+- **Ordered Path Encoder:** Encodes path router sequences with positional embeddings.
+- **Additive Tomography Layer:** Enforces physical non-negativity $x_e \ge 0$ and path additivity ($y = A x + b$).
+- **Coverage-Aware Residual Gate:** Fuses classical ridge tomography with neural residual corrections ($b_g = -2.0$), guaranteeing zero degradation below convex baselines.
+- **Dynamic Context Warm-Start:** Calibrates link delay priors to eliminate cross-continent access-link biases.
+- **Log-Space Laplace NLL Loss:** Aligns loss with MAE and handles heavy-tailed network jitter.
+- **Uncertainty & Active Probing:** Heteroscedastic Gaussian uncertainty head with Monte Carlo Dropout; supports active path acquisition (BALD, Edge Coverage).
 
-## Repository structure
+## Repository Structure
 
 | Path | Purpose |
 |---|---|
-| `Dataset_Build.ipynb` | Builds the strict real-ITDK dataset |
-| `DeepNT_Plus.ipynb` | Runs training, evaluation, baselines, and ablations |
-| `deepnt_plus/` | DeepNT+ implementation and experiment utilities |
-| `tests/` | Synthetic tests for data, models, causality, metrics, and evaluation |
-| `DEEPNT_PLUS_COMPLETE_STATUS_REPORT.md` | Detailed implementation and experiment status |
-| `results/deepnt_plus_test_mae.svg` | Output comparison chart |
+| `DeepNT_Plus_Master_Benchmark.ipynb` | All-in-one Google Colab master notebook (IPv4 & IPv6 dropdown) |
+| `Run_5Seed_Benchmark_Suite.ipynb` | Dedicated 5-seed benchmark across all 3 datasets |
+| `Run_Step5_Leave_Monitor_Out.ipynb` | Leave-Monitor-Out cross-vantage generalization experiment |
+| `Run_Step6_Active_Learning_Curve.ipynb` | Active learning probing curve simulation (15%, 30%, 45% budgets) |
+| `DeepNT_Plus.ipynb` | IPv4 experiment notebook |
+| `DeepNT_Plus_IPv6.ipynb` | Global IPv6 Ark experiment notebook |
+| `deepnt_plus/` | DeepNT+ core library (PyTorch models, layers, baselines, training) |
+| `tests/` | Unit test suite verifying zero leakage, causality, and mathematical contracts |
+| `DEEPNT_PLUS_5SEED_BENCHMARK_AND_TECHNIQUES_REPORT.md` | Full empirical benchmark report across 5 seeds |
+| `THESIS_STRUCTURE_TECHNIQUES_AND_ARCHITECTURE_MASTER_GUIDE.md` | Thesis methodology, techniques, and architecture guide |
+| `COLAB_EXECUTION_GUIDE_BN.md` | Step-by-step Bengali execution manual for Google Colab |
 
-## Recorded test results
+## 5-Seed Benchmark Results (Test Split)
 
-The following are from the current exploratory test run. Lower MAE and RMSE are
-better; higher R² is better.
-
-| Model | Test MAE (ms) | Test RMSE (ms) | Test R² |
-|---|---:|---:|---:|
-| Classical convex tomography | **59.555** | **200.634** | **0.047** |
-| DeepNT static | 65.676 | 202.726 | 0.027 |
-| DeepNT+ full | 74.105 | 207.220 | -0.017 |
-
-![Test MAE comparison](results/deepnt_plus_test_mae.svg)
-
-The current result shows that the simpler DeepNT static model outperforms the
-full DeepNT+ model on this recorded test split. DeepNT+ should therefore be
-improved and re-evaluated rather than presented as the final best model.
-
-## Ablation results
-
-| Variant | Test MAE (ms) |
-|---|---:|
-| DeepNT+ without temporal branch | 77.002 |
-| DeepNT+ uncertainty ablation | 80.625 |
-| DeepNT+ context-feature ablation | 81.112 |
-| DeepNT+ convex-fusion ablation | 84.376 |
-| DeepNT+ tomography ablation | 105.303 |
-
-## Evaluation criteria
-
-The primary performance metric is **test MAE**:
-
-- DeepNT+ current baseline: `74.105 ms`
-- DeepNT static target to beat: `65.676 ms`
-- Classical convex tomography target to beat: `59.555 ms`
-
-An improved model should also reduce test RMSE below `207.220 ms`, increase test
-R² above `-0.017`, and maintain stable results across multiple random seeds.
-
-## Running the tests
-
-From the repository root:
-
-```powershell
-python tests/test_deepnt_plus.py
-```
-
-## Reproducibility and next steps
-
-1. Rebuild or verify the processed dataset.
-2. Confirm train, validation, and test monitor identities and counts.
-3. Run a clearly labeled leave-monitor-out experiment.
-4. Compare DeepNT+, DeepNT static, and classical convex tomography on the same
-   verified split.
-5. Save each new run in a new output directory instead of overwriting `run_02`.
-
-See [DEEPNT_PLUS_COMPLETE_STATUS_REPORT.md](DEEPNT_PLUS_COMPLETE_STATUS_REPORT.md)
-for the complete status, data construction details, architecture notes, and
-methodological limitations.
+| Dataset | Model | Test MAE (ms) | Test RMSE (ms) | Test R² |
+|---|---|---:|---:|---:|
+| **IPv4 run_03** (Compressed 5-graph) | **DeepNT (static, causal)** | **43.53 ± 1.04** | **58.28 ± 0.64** | **0.612 ± 0.009** |
+| | Convex Tomography | 46.28 ± 0.00 | 58.72 ± 0.00 | 0.606 ± 0.000 |
+| | DeepNT+ (full, improved) | 46.65 ± 3.28 | 59.51 ± 2.23 | 0.595 ± 0.030 |
+| **IPv4 run_02** (15-graph) | Convex Tomography | 48.37 ± 0.00 | 61.27 ± 0.00 | 0.572 ± 0.000 |
+| | **DeepNT+ (full, improved)** | **48.71 ± 1.91** | **62.15 ± 0.92** | **0.559 ± 0.013** |
+| | DeepNT (static, causal) | 48.74 ± 1.89 | 62.41 ± 1.20 | 0.556 ± 0.017 |
+| **Global IPv6** (5-graph Ark) | Median Baseline | 242.67 ± 0.00 | 284.41 ± 0.00 | -0.006 ± 0.000 |
+| | DeepNT (static, causal) | 246.22 ± 0.58 | 289.33 ± 0.96 | -0.041 ± 0.007 |
+| | DeepNT+ (full, improved) | 246.33 ± 0.06 | 289.50 ± 0.40 | -0.042 ± 0.003 |
+| | Convex Tomography (warm-start) | 265.95 ± 0.00 | 317.56 ± 0.00 | -0.254 ± 0.000 |

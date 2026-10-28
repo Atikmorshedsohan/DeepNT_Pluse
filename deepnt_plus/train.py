@@ -29,11 +29,15 @@ class TrainConfig:
     train_label_scope: str = 'all_paths'     # all_paths | observed_only
     causal: bool = False
     n_blocks: int = 6
+    loss_type: str = 'laplace'               # laplace (robust, MAE-aligned) | gaussian
     mse_weight: float = 0.5
     tomo_weight: float = 0.5
     loss_weight: float = 0.5
     grad_clip: float = 1.0
     mc_samples: int = 20
+    use_cosine_lr: bool = True
+    eta_min: float = 1e-5
+    residual_reg_weight: float = 0.05
 
     def to_dict(self):
         return asdict(self)
@@ -71,13 +75,31 @@ def eval_episode(g):
 def compute_loss(model, g, ctx, tgt, cfg):
     out = model(g, ctx, tgt, g.y[ctx])                 # only context RTTs enter the model
     z, mu = model.z_of(g.y[tgt]), out['mu_z']          # target RTT is used here, in the loss, and nowhere else
+    use_laplace = getattr(cfg, 'loss_type', 'laplace') == 'laplace'
+
     if out['logvar'] is not None:
         lv = out['logvar']
-        loss = (0.5 * (lv + (z - mu) ** 2 * torch.exp(-lv))).mean() + cfg.mse_weight * ((z - mu) ** 2).mean()
+        if use_laplace:
+            # Laplace NLL: e^{-s} * |z - mu| + s (where lv = s is the log-scale parameter)
+            loss = (torch.exp(-lv) * torch.abs(z - mu) + lv).mean() + cfg.mse_weight * torch.abs(z - mu).mean()
+        else:
+            loss = (0.5 * (lv + (z - mu) ** 2 * torch.exp(-lv))).mean() + cfg.mse_weight * ((z - mu) ** 2).mean()
     else:
-        loss = ((z - mu) ** 2).mean()
+        if use_laplace:
+            loss = torch.abs(z - mu).mean()
+        else:
+            loss = ((z - mu) ** 2).mean()
+
     if model.cfg.tomography and ctx.numel():
-        loss = loss + cfg.tomo_weight * ((model.z_of(out['y_add_ctx']) - model.z_of(g.y[ctx])) ** 2).mean()
+        if use_laplace:
+            loss = loss + cfg.tomo_weight * torch.abs(model.z_of(out['y_add_ctx']) - model.z_of(g.y[ctx])).mean()
+        else:
+            loss = loss + cfg.tomo_weight * ((model.z_of(out['y_add_ctx']) - model.z_of(g.y[ctx])) ** 2).mean()
+
+    # Residual regularization penalty: keep neural refinement bounded
+    if getattr(cfg, 'residual_reg_weight', 0.0) > 0 and 'y_convex' in out and 'y_hat' in out:
+        loss = loss + cfg.residual_reg_weight * torch.abs(model.z_of(out['y_hat']) - model.z_of(out['y_convex'])).mean()
+
     if out['loss_logit'] is not None:
         lab = g.loss[tgt]
         keep = ~torch.isnan(lab)
@@ -135,6 +157,11 @@ def train_model(model, graphs, cfg, seed=0, log=None):
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+    scheduler = None
+    if getattr(cfg, 'use_cosine_lr', False):
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            opt, T_max=cfg.epochs, eta_min=getattr(cfg, 'eta_min', 1e-5)
+        )
     train_ids = [k for k, g in graphs.items() if g.split == 'train']
     best, best_state, stale, history = float('inf'), None, 0, []
     for epoch in range(1, cfg.epochs + 1):
@@ -153,6 +180,8 @@ def train_model(model, graphs, cfg, seed=0, log=None):
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
             opt.step()
             epoch_loss.append(float(loss.detach()))
+        if scheduler is not None:
+            scheduler.step()
         val = score(evaluate(model, graphs, 'val', cfg))
         history.append({'epoch': epoch, 'train_loss': float(np.mean(epoch_loss)), 'val_MAE': val['MAE'],
                         'val_RMSE': val['RMSE']})
