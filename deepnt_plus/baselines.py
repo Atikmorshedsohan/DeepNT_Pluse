@@ -9,7 +9,7 @@ from sklearn.linear_model import Ridge
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
-from .train import eval_episode
+from .train import eval_episode, make_blocks
 
 
 def path_features(g, monitors):
@@ -100,13 +100,54 @@ def convex_tomography(g, alpha, edge_ms=None, intercept=0.0):
     return tgt.tolist(), np.hstack([A[tgt.numpy()], np.ones((len(tgt), 1))]) @ x
 
 
-def run_convex_baseline(graphs, norm=None, alphas=(0.1, 1, 10, 100, 1000), warm_start=True):
+def causal_convex_tomography(g, alpha, cfg, edge_ms=None, intercept=0.0):
+    """Causal tomography: solves classical ridge tomography block-by-block,
+    matching the exact causal context available to causal neural models."""
+    ctx, tgt = eval_episode(g)
+    A = g.A.numpy()
+    blocks = make_blocks(g, ctx, tgt, cfg)
+    all_tgt = []
+    all_pred = []
+    for c_idx, t_idx in blocks:
+        if not t_idx.numel():
+            continue
+        all_tgt.extend(t_idx.tolist())
+        if c_idx.numel() == 0:
+            if edge_ms is None:
+                ctx_m = g.observed & g.ok
+                e_prior = float(np.median((g.y[ctx_m] / g.hops[ctx_m]).numpy())) if ctx_m.any() else 5.0
+            else:
+                e_prior = edge_ms
+            x0 = np.concatenate([np.full(A.shape[1], e_prior), [intercept]])
+            pred_chunk = np.hstack([A[t_idx.numpy()], np.ones((len(t_idx), 1))]) @ x0
+            all_pred.extend(pred_chunk.tolist())
+            continue
+        Ac = np.hstack([A[c_idx.numpy()], np.ones((len(c_idx), 1))])
+        if edge_ms is None:
+            ctx_m = c_idx
+            e_prior = float(np.median((g.y[ctx_m] / g.hops[ctx_m]).numpy())) if ctx_m.numel() else 5.0
+        else:
+            e_prior = edge_ms
+        x0 = np.concatenate([np.full(A.shape[1], e_prior), [intercept]])
+        resid = g.y[c_idx].numpy() - Ac @ x0
+        x = np.clip(x0 + Ac.T @ np.linalg.solve(Ac @ Ac.T + alpha * np.eye(len(c_idx)), resid), 0, None)
+        pred_chunk = np.hstack([A[t_idx.numpy()], np.ones((len(t_idx), 1))]) @ x
+        all_pred.extend(pred_chunk.tolist())
+    return all_tgt, np.array(all_pred)
+
+
+def run_convex_baseline(graphs, norm=None, alphas=(0.1, 1, 10, 100, 1000), warm_start=True, cfg=None):
+    is_causal = cfg is not None and getattr(cfg, 'causal', False)
+    model_name = 'Convex tomography (causal)' if is_causal else 'Convex tomography (classical)'
     def frames_for(split, alpha):
         res = []
         for g in graphs.values():
             if g.split == split:
                 prior = None if warm_start else (norm['prior_edge_ms'] if norm else None)
-                res.append(_frame(g, *convex_tomography(g, alpha, prior), 'Convex tomography (classical)'))
+                if is_causal:
+                    res.append(_frame(g, *causal_convex_tomography(g, alpha, cfg, prior), model_name))
+                else:
+                    res.append(_frame(g, *convex_tomography(g, alpha, prior), model_name))
         return res
     val_mae = {a: np.mean(np.abs(np.concatenate([(f['y_pred'] - f['y_true']).to_numpy() for f in frames_for('val', a)])))
                for a in alphas}

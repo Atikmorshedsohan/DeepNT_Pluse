@@ -90,6 +90,12 @@ def load_dataset(processed_dir, holdout_monitor=None):
     train_edges = edge_log[edges['graph_id'].map(split_of) == 'train']
     edge_stats = (float(train_edges.mean()), float(train_edges.std() or 1.0))
 
+    has_geo = 'geo_distance_km' in edges.columns and edges['geo_distance_km'].notna().any()
+    if has_geo:
+        geo_log = np.log1p(edges['geo_distance_km'].astype(float).clip(lower=0))
+        train_geo = geo_log[edges['graph_id'].map(split_of) == 'train']
+        geo_stats = (float(train_geo.mean()), float(train_geo.std() or 1.0))
+
     graphs = {}
     for gid in graph_ids:
         nf = node_frame[node_frame['graph_id'] == gid].reset_index(drop=True)
@@ -101,7 +107,12 @@ def load_dataset(processed_dir, holdout_monitor=None):
         feats = np.stack([_standardise(nf[c].fillna(node_stats[c][0]).to_numpy(float), *node_stats[c])
                           for c in NODE_FEATURES], axis=1)
         uv = np.array([[idx[a], idx[b]] for a, b in zip(ef['src'], ef['dst'])], dtype=np.int64)
-        e_feat = _standardise(np.log1p(ef['path_count_all'].astype(float)).to_numpy(), *edge_stats)[:, None]
+        f_count = _standardise(np.log1p(ef['path_count_all'].astype(float)).to_numpy(), *edge_stats)
+        if has_geo:
+            f_geo = _standardise(np.log1p(ef['geo_distance_km'].astype(float).clip(lower=0)).to_numpy(), *geo_stats)
+            e_feat = np.stack([f_count, f_geo], axis=1)
+        else:
+            e_feat = f_count[:, None]
         A = sp.load_npz(proc / 'tomography' / f'A_{gid}.npz').toarray().astype(np.float32)
         assert A.shape == (len(pf), len(ef)), f"{gid}: A shape {A.shape} != paths x edges"
 
@@ -142,6 +153,7 @@ def load_dataset(processed_dir, holdout_monitor=None):
         'rate_mean': float(rate.mean()), 'rate_std': float(rate.std()),
         'prior_edge_ms': float((y / hops).median()),
         'node_stats': node_stats, 'edge_stats': edge_stats,
+        'edge_dim': 2 if has_geo else 1,
     }
     return graphs, norm
 

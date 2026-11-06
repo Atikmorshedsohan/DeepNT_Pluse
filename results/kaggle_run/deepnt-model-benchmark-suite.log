@@ -1,0 +1,86 @@
+[{"stream_name":"stdout","time":12.455516072,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":12.455592929,"data":"🛡️ KAGGLE GPU AUTHENTIC BENCHMARK SUITE: 100% LEAKAGE-FREE EVALUATION\n"}
+,{"stream_name":"stdout","time":12.455604829,"data":"   (Zero Geographical Distance, Pure Topological \u0026 Traffic Features Only)\n"}
+,{"stream_name":"stdout","time":12.455608182,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":12.455610832,"data":"PyTorch Version : 2.11.0+cu130\n"}
+,{"stream_name":"stdout","time":12.706188916,"data":"CUDA Available  : True\n"}
+,{"stream_name":"stdout","time":12.743563642,"data":"GPU Accelerator : Tesla T4\n"}
+,{"stream_name":"stdout","time":12.743593445,"data":"Total GPU VRAM  : 14.56 GB\n"}
+,{"stream_name":"stdout","time":12.743600715,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":12.913475628,"data":"✅ Authentic Suite Root: /kaggle/input/datasets/atikmorshedsohan/deepnt-plus-network-tomography-suite\n"}
+,{"stream_name":"stdout","time":13.342814576,"data":"\n"}
+,{"stream_name":"stdout","time":13.342848606,"data":"===========================================================================\n"}
+,{"stream_name":"stdout","time":13.342853196,"data":"🌟 EVALUATING AUTHENTIC (LEAKAGE-FREE) DATASET: IPv4 (run_03, Dense)\n"}
+,{"stream_name":"stdout","time":13.342857529,"data":"===========================================================================\n"}
+,{"stream_name":"stdout","time":14.598106914,"data":"  [Median            ] MAE: 78.80 ms | R2: -0.4%\n"}
+,{"stream_name":"stdout","time":14.598147987,"data":"  [Hop-count         ] MAE: 79.38 ms | R2: -14.8%\n"}
+,{"stream_name":"stdout","time":14.677209723,"data":"  [Convex (Classical)] MAE: 52.03 ms | R2: 45.1% | RMSE: 69.35 ms\n"}
+,{"stream_name":"stdout","time":48.003916152,"data":"  [GAT               ] MAE: 72.64 ± 4.72 ms | R2: 12.5% (33.3s)\n"}
+,{"stream_name":"stdout","time":66.420782541,"data":"  [GraphSAGE         ] MAE: 80.47 ± 4.68 ms | R2: -8.6% (18.4s)\n"}
+,{"stream_name":"stdout","time":91.774956618,"data":"  [DeepNT (Static)   ] MAE: 65.17 ± 4.64 ms | R2: 27.5% (25.4s)\n"}
+,{"stream_name":"stdout","time":122.655728862,"data":"  [DeepNT+ (Full, Ours)] MAE: 47.78 ± 0.62 ms | R2: 55.5% | Cov90: 66.9% | ECE: 0.232 (30.9s) 🥇\n"}
+,{"stream_name":"stdout","time":122.655770523,"data":"\n"}
+,{"stream_name":"stdout","time":122.655776407,"data":"===========================================================================\n"}
+,{"stream_name":"stdout","time":122.655781389,"data":"🌟 EVALUATING AUTHENTIC (LEAKAGE-FREE) DATASET: IPv4 (run_02, 15-Graphs)\n"}
+,{"stream_name":"stdout","time":122.655786295,"data":"===========================================================================\n"}
+,{"stream_name":"stdout","time":124.232309063,"data":"  [Median            ] MAE: 77.99 ms | R2: -0.0%\n"}
+,{"stream_name":"stdout","time":124.23238254,"data":"  [Hop-count         ] MAE: 81.42 ms | R2: -16.5%\n"}
+,{"stream_name":"stdout","time":124.238311164,"data":"  [Convex (Classical)] MAE: 50.10 ms | R2: 55.1% | RMSE: 62.76 ms\n"}
+,{"stream_name":"stdout","time":199.411125025,"data":"  [GAT               ] MAE: 69.27 ± 18.03 ms | R2: 15.7% (75.2s)\n"}
+,{"stream_name":"stdout","time":253.179429082,"data":"  [GraphSAGE         ] MAE: 71.53 ± 17.07 ms | R2: 12.8% (53.8s)\n"}
+,{"stream_name":"stdout","time":329.576225405,"data":"  [DeepNT (Static)   ] MAE: 49.13 ± 2.99 ms | R2: 54.2% (76.4s)\n"}
+,{"stream_name":"stdout","time":423.93646773,"data":"  [DeepNT+ (Full, Ours)] MAE: 47.25 ± 1.51 ms | R2: 55.2% | Cov90: 79.3% | ECE: 0.130 (94.4s) 🥇\n"}
+,{"stream_name":"stdout","time":423.93656225,"data":"\n"}
+,{"stream_name":"stdout","time":423.93656835,"data":"===========================================================================\n"}
+,{"stream_name":"stdout","time":423.93657305199997,"data":"🌟 EVALUATING AUTHENTIC (LEAKAGE-FREE) DATASET: IPv6 (Global Ark)\n"}
+,{"stream_name":"stdout","time":423.93657703,"data":"===========================================================================\n"}
+,{"stream_name":"stdout","time":425.541584876,"data":"  [Median            ] MAE: 242.67 ms | R2: -0.6%\n"}
+,{"stream_name":"stdout","time":425.541632458,"data":"  [Hop-count         ] MAE: 317.62 ms | R2: -91.0%\n"}
+,{"stream_name":"stdout","time":425.580139931,"data":"  [Convex (Classical)] MAE: 338.63 ms | R2: -121.4% | RMSE: 421.90 ms\n"}
+,{"stream_name":"stdout","time":496.880248595,"data":"  [GAT               ] MAE: 243.20 ± 0.22 ms | R2: -1.7% (71.3s)\n"}
+,{"stream_name":"stdout","time":563.987321711,"data":"  [GraphSAGE         ] MAE: 243.37 ± 0.69 ms | R2: -2.2% (67.1s)\n"}
+,{"stream_name":"stdout","time":635.617340546,"data":"  [DeepNT (Static)   ] MAE: 250.09 ± 5.55 ms | R2: -9.2% (71.6s)\n"}
+,{"stream_name":"stdout","time":720.051403976,"data":"  [DeepNT+ (Full, Ours)] MAE: 246.05 ± 0.21 ms | R2: -4.6% | Cov90: 87.9% | ECE: 0.032 (84.4s) 🥇\n"}
+,{"stream_name":"stdout","time":720.059330124,"data":"\n"}
+,{"stream_name":"stdout","time":720.059355363,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":720.059378531,"data":"📊 100% AUTHENTIC MASTER BENCHMARK TABLE (LEAKAGE-FREE)\n"}
+,{"stream_name":"stdout","time":720.059384922,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":720.069404227,"data":"                 Dataset                Model        MAE   MAE_std          R2     Cov90      ECE\n"}
+,{"stream_name":"stdout","time":720.069433435,"data":"    IPv4 (run_03, Dense)               Median  78.797356  0.000000   -0.355327       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069439786,"data":"    IPv4 (run_03, Dense)            Hop-count  79.383888  0.000000  -14.788449       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069451081,"data":"    IPv4 (run_03, Dense)   Convex (Classical)  52.028572  0.000000   45.103669       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069455994,"data":"    IPv4 (run_03, Dense)                  GAT  72.642128  4.722771   12.523373       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069475508,"data":"    IPv4 (run_03, Dense)            GraphSAGE  80.469922  4.679106   -8.589812       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069481344,"data":"    IPv4 (run_03, Dense)      DeepNT (Static)  65.172971  4.643074   27.459176 51.598174 0.365126\n"}
+,{"stream_name":"stdout","time":720.069486616,"data":"    IPv4 (run_03, Dense) DeepNT+ (Full, Ours)  47.780764  0.618555   55.483141 66.894977 0.232135\n"}
+,{"stream_name":"stdout","time":720.069492634,"data":"IPv4 (run_02, 15-Graphs)               Median  77.985023  0.000000   -0.001562       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069497666,"data":"IPv4 (run_02, 15-Graphs)            Hop-count  81.421967  0.000000  -16.549623       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069514447,"data":"IPv4 (run_02, 15-Graphs)   Convex (Classical)  50.099205  0.000000   55.079317       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069520775,"data":"IPv4 (run_02, 15-Graphs)                  GAT  69.274977 18.029773   15.702550       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069542961,"data":"IPv4 (run_02, 15-Graphs)            GraphSAGE  71.527089 17.073741   12.753592       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069545844,"data":"IPv4 (run_02, 15-Graphs)      DeepNT (Static)  49.133692  2.989488   54.185671 85.747126 0.080029\n"}
+,{"stream_name":"stdout","time":720.069548305,"data":"IPv4 (run_02, 15-Graphs) DeepNT+ (Full, Ours)  47.252220  1.505462   55.158818 79.310345 0.130029\n"}
+,{"stream_name":"stdout","time":720.06955083,"data":"       IPv6 (Global Ark)               Median 242.668640  0.000000   -0.561154       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069553259,"data":"       IPv6 (Global Ark)            Hop-count 317.617249  0.000000  -91.003466       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069555682,"data":"       IPv6 (Global Ark)   Convex (Classical) 338.634064  0.000000 -121.395731       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069571742,"data":"       IPv6 (Global Ark)                  GAT 243.200002  0.224660   -1.682897       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069575829,"data":"       IPv6 (Global Ark)            GraphSAGE 243.367956  0.688015   -2.216939       NaN      NaN\n"}
+,{"stream_name":"stdout","time":720.069580972,"data":"       IPv6 (Global Ark)      DeepNT (Static) 250.085790  5.553874   -9.215502 88.565657 0.027601\n"}
+,{"stream_name":"stdout","time":720.0695852,"data":"       IPv6 (Global Ark) DeepNT+ (Full, Ours) 246.049072  0.213590   -4.608019 87.919192 0.031944\n"}
+,{"stream_name":"stdout","time":720.069589573,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":720.069593514,"data":"\n"}
+,{"stream_name":"stdout","time":720.069596897,"data":"🎨 Generating 100% authentic publication-quality charts...\n"}
+,{"stream_name":"stdout","time":720.868461382,"data":"✅ Saved authentic_master_comparison.png\n"}
+,{"stream_name":"stdout","time":721.739554006,"data":"✅ Saved authentic_delay_scatter.png\n"}
+,{"stream_name":"stdout","time":722.175561133,"data":"✅ Saved authentic_uncertainty_calibration.png\n"}
+,{"stream_name":"stdout","time":722.175595432,"data":"\n"}
+,{"stream_name":"stdout","time":722.175604382,"data":"================================================================================\n"}
+,{"stream_name":"stdout","time":722.17560737,"data":"🎉 100% AUTHENTIC ZERO-LEAKAGE BENCHMARKS COMPLETED!\n"}
+,{"stream_name":"stdout","time":722.175609998,"data":"================================================================================\n"}
+,{"stream_name":"stderr","time":728.135383389,"data":"/usr/local/lib/python3.13/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":728.135413285,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":728.433100513,"data":"/usr/local/lib/python3.13/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":728.433123884,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":729.33958396,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":730.574126898,"data":"[NbConvertApp] Writing 461310 bytes to __results__.html\n"}
+]

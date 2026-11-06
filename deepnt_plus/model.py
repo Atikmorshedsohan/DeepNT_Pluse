@@ -18,6 +18,7 @@ from .tgn import TemporalBranch
 @dataclass
 class ModelConfig:
     node_dim: int = 8
+    edge_dim: int = None             # 1 (path count only) or 2 (with geographical distance); None auto-detects from norm
     d: int = 64
     gnn_kind: str = 'split'          # split | sage | gat
     gnn_layers: int = 2
@@ -44,7 +45,8 @@ class DeepNTPlus(nn.Module):
         for k in ('log_rtt_mean', 'log_rtt_std', 'rate_mean', 'rate_std', 'prior_edge_ms'):
             self.register_buffer(k, torch.tensor(float(norm[k])))
         self.gnn = GNN(cfg.gnn_kind, cfg.node_dim + 2, d, cfg.gnn_layers, cfg.dropout, cfg.heads)
-        self.edge_mlp = nn.Sequential(nn.Linear(2 * d + 2, d), nn.ReLU(), nn.Linear(d, 1))
+        edge_feat_dim = cfg.edge_dim if cfg.edge_dim is not None else norm.get('edge_dim', 1)
+        self.edge_mlp = nn.Sequential(nn.Linear(2 * d + edge_feat_dim + 1, d), nn.ReLU(), nn.Linear(d, 1))
         self.bias_raw = nn.Parameter(torch.zeros(()))
         self.path_enc = PathEncoder(d, cfg.heads, 1, cfg.dropout)
         self.temporal = TemporalBranch(d, cfg.mem_dim, 16, cfg.history_k, cfg.heads, cfg.dropout) if cfg.temporal else None

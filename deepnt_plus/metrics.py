@@ -21,24 +21,40 @@ def regression_metrics(y_true, y_pred):
     }
 
 
-def calibration_metrics(y_true_ms, mu_log, sigma_log):
-    """Predictive distribution: log1p(RTT) ~ N(mu_log, sigma_log^2). Returns mean NLL (log space), sharpness,
-    empirical coverage of central intervals, and the mean absolute coverage error (regression ECE)."""
+def calibration_metrics(y_true_ms, mu_log, sigma_log, dist='gaussian'):
+    """Predictive distribution: log1p(RTT) ~ Laplace or Normal(mu_log, sigma_log^2). Returns mean NLL (log space),
+    sharpness, empirical coverage of central intervals, and the mean absolute coverage error (regression ECE)."""
     z = np.log1p(np.asarray(y_true_ms, float))
     mu, sd = np.asarray(mu_log, float), np.maximum(np.asarray(sigma_log, float), 1e-6)
-    out = {'NLL': float(np.mean(0.5 * np.log(2 * np.pi * sd ** 2) + (z - mu) ** 2 / (2 * sd ** 2))),
-           'sharpness_log': float(sd.mean())}
-    gaps = []
-    for level in LEVELS:
-        k = _norm.ppf(0.5 + level / 2)
-        cov = float(np.mean(np.abs(z - mu) <= k * sd))
-        out[f'coverage_{int(level * 100)}'] = cov
-        gaps.append(abs(cov - level))
-    out['ECE_reg'] = float(np.mean(gaps))
+
+    if dist == 'laplace':
+        b = sd / np.sqrt(2.0)
+        out = {'NLL': float(np.mean(np.abs(z - mu) / b + np.log(2.0 * b))),
+               'sharpness_log': float(sd.mean())}
+        gaps = []
+        for level in LEVELS:
+            k = -b * np.log(1.0 - level)
+            cov = float(np.mean(np.abs(z - mu) <= k))
+            out[f'coverage_{int(level * 100)}'] = cov
+            gaps.append(abs(cov - level))
+        out['ECE_reg'] = float(np.mean(gaps))
+    else:
+        out = {'NLL': float(np.mean(0.5 * np.log(2 * np.pi * sd ** 2) + (z - mu) ** 2 / (2 * sd ** 2))),
+               'sharpness_log': float(sd.mean())}
+        gaps = []
+        for level in LEVELS:
+            k = _norm.ppf(0.5 + level / 2)
+            cov = float(np.mean(np.abs(z - mu) <= k * sd))
+            out[f'coverage_{int(level * 100)}'] = cov
+            gaps.append(abs(cov - level))
+        out['ECE_reg'] = float(np.mean(gaps))
     return out
 
 
-def reliability_curve(y_true_ms, mu_log, sigma_log, levels=np.linspace(0.05, 0.95, 19)):
+def reliability_curve(y_true_ms, mu_log, sigma_log, levels=np.linspace(0.05, 0.95, 19), dist='gaussian'):
     z = np.log1p(np.asarray(y_true_ms, float))
     mu, sd = np.asarray(mu_log, float), np.maximum(np.asarray(sigma_log, float), 1e-6)
+    if dist == 'laplace':
+        b = sd / np.sqrt(2.0)
+        return levels, np.array([np.mean(np.abs(z - mu) <= -b * np.log(1.0 - l)) for l in levels])
     return levels, np.array([np.mean(np.abs(z - mu) <= _norm.ppf(0.5 + l / 2) * sd) for l in levels])

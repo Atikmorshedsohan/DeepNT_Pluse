@@ -25,7 +25,7 @@ class TrainConfig:
     lr: float = 2e-3
     weight_decay: float = 1e-4
     patience: int = 20
-    ctx_frac: tuple = (0.15, 0.45)
+    ctx_frac: tuple = (0.25, 0.55)           # Centered around the 0.45 evaluation observation rate
     train_label_scope: str = 'all_paths'     # all_paths | observed_only
     causal: bool = False
     n_blocks: int = 6
@@ -38,6 +38,8 @@ class TrainConfig:
     use_cosine_lr: bool = True
     eta_min: float = 1e-5
     residual_reg_weight: float = 0.05
+    episodes_per_graph: int = 8              # Multiple episodes per graph per epoch (solves gradient step deficiency)
+    val_masks: int = 4                       # Multi-mask smoothed validation to stabilize checkpoint selection
 
     def to_dict(self):
         return asdict(self)
@@ -113,19 +115,28 @@ def predict_frame(model, g, cfg, ctx=None, tgt=None, mc=0):
     if ctx is None:
         ctx, tgt = eval_episode(g)
     rows = []
+    use_laplace = getattr(cfg, 'loss_type', 'laplace') == 'laplace'
     for c_idx, t_idx in make_blocks(g, ctx, tgt, cfg):
         model.eval()
         with torch.no_grad():
             out = model(g, c_idx, t_idx, g.y[c_idx])
             var_epi = torch.zeros(t_idx.numel())
-            var_alea = torch.exp(out['logvar']) if out['logvar'] is not None else torch.full((t_idx.numel(),), float('nan'))
+            if out['logvar'] is not None:
+                # In Laplace NLL, lv = s = log(b). Var(Y) = 2*b^2 = 2*exp(2*lv)
+                # In Gaussian NLL, lv = log(sigma^2). Var(Y) = exp(lv)
+                var_alea = 2.0 * torch.exp(2.0 * out['logvar']) if use_laplace else torch.exp(out['logvar'])
+            else:
+                var_alea = torch.full((t_idx.numel(),), float('nan'))
             if mc > 0:
                 model.train()
                 passes = [model(g, c_idx, t_idx, g.y[c_idx]) for _ in range(mc)]
                 model.eval()
                 var_epi = torch.stack([p['mu_z'] for p in passes]).var(0)
                 if passes[0]['logvar'] is not None:
-                    var_alea = torch.stack([torch.exp(p['logvar']) for p in passes]).mean(0)
+                    if use_laplace:
+                        var_alea = torch.stack([2.0 * torch.exp(2.0 * p['logvar']) for p in passes]).mean(0)
+                    else:
+                        var_alea = torch.stack([torch.exp(p['logvar']) for p in passes]).mean(0)
         total = (var_epi + var_alea) if out['logvar'] is not None else var_epi
         sigma = torch.sqrt(total) * model.log_rtt_std if (mc > 0 or out['logvar'] is not None) else torch.full_like(total, float('nan'))
         for j, p in enumerate(t_idx.tolist()):
@@ -145,11 +156,11 @@ def evaluate(model, graphs, split, cfg, mc=0):
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
-def score(frame):
+def score(frame, dist='laplace'):
     """Regression metrics, plus calibration when the model produced an uncertainty."""
     out = regression_metrics(frame['y_true'], frame['y_pred'])
     if frame['sigma_log'].notna().all():
-        out.update(calibration_metrics(frame['y_true'], frame['mu_log'], frame['sigma_log']))
+        out.update(calibration_metrics(frame['y_true'], frame['mu_log'], frame['sigma_log'], dist=dist))
     return out
 
 
@@ -163,32 +174,54 @@ def train_model(model, graphs, cfg, seed=0, log=None):
             opt, T_max=cfg.epochs, eta_min=getattr(cfg, 'eta_min', 1e-5)
         )
     train_ids = [k for k, g in graphs.items() if g.split == 'train']
+    val_graphs = [g for g in graphs.values() if g.split == 'val']
+    episodes_per_graph = getattr(cfg, 'episodes_per_graph', 8)
+    n_val_masks = getattr(cfg, 'val_masks', 4)
     best, best_state, stale, history = float('inf'), None, 0, []
+
     for epoch in range(1, cfg.epochs + 1):
         model.train()
         epoch_loss = []
-        for k in rng.permutation(train_ids):
-            g = graphs[k]
-            episode = sample_episode(g, rng, cfg)
-            if episode is None:
-                continue
-            blocks = make_blocks(g, *episode, cfg)
-            n_tgt = sum(t.numel() for _, t in blocks)
-            loss = sum(compute_loss(model, g, c, t, cfg) * t.numel() / n_tgt for c, t in blocks)
-            opt.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
-            opt.step()
-            epoch_loss.append(float(loss.detach()))
+        for _ in range(episodes_per_graph):
+            for k in rng.permutation(train_ids):
+                g = graphs[k]
+                episode = sample_episode(g, rng, cfg)
+                if episode is None:
+                    continue
+                blocks = make_blocks(g, *episode, cfg)
+                n_tgt = sum(t.numel() for _, t in blocks)
+                loss = sum(compute_loss(model, g, c, t, cfg) * t.numel() / n_tgt for c, t in blocks)
+                opt.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
+                opt.step()
+                epoch_loss.append(float(loss.detach()))
         if scheduler is not None:
             scheduler.step()
-        val = score(evaluate(model, graphs, 'val', cfg))
+
+        # 1. Base canonical validation evaluation
+        val_frame = evaluate(model, graphs, 'val', cfg)
+        val = score(val_frame, dist=getattr(cfg, 'loss_type', 'laplace')) if not val_frame.empty else {'MAE': float('nan'), 'RMSE': float('nan')}
+        
+        # 2. Multi-mask validation smoothing to prevent noisy checkpoint jitter
+        val_maes = [val['MAE']] if not np.isnan(val['MAE']) else []
+        if n_val_masks > 1 and val_graphs:
+            val_rng = np.random.default_rng(10000 + epoch)
+            for _ in range(n_val_masks - 1):
+                for vg in val_graphs:
+                    ep = sample_episode(vg, val_rng, cfg)
+                    if ep is not None:
+                        f_ep = predict_frame(model, vg, cfg, ctx=ep[0], tgt=ep[1])
+                        if not f_ep.empty:
+                            val_maes.append(float(np.mean(np.abs(f_ep['y_pred'] - f_ep['y_true']))))
+        val_mae_smooth = float(np.mean(val_maes)) if val_maes else val['MAE']
+
         history.append({'epoch': epoch, 'train_loss': float(np.mean(epoch_loss)), 'val_MAE': val['MAE'],
-                        'val_RMSE': val['RMSE']})
+                        'val_MAE_smooth': val_mae_smooth, 'val_RMSE': val['RMSE']})
         if log and (epoch % 10 == 0 or epoch == 1):
-            log(f"epoch {epoch:3d} | train loss {history[-1]['train_loss']:.4f} | val MAE {val['MAE']:.2f} ms")
-        if val['MAE'] < best - 1e-6:
-            best, best_state, stale = val['MAE'], copy.deepcopy(model.state_dict()), 0
+            log(f"epoch {epoch:3d} | train loss {history[-1]['train_loss']:.4f} | val MAE {val['MAE']:.2f} ms (smooth {val_mae_smooth:.2f} ms)")
+        if val_mae_smooth < best - 1e-6:
+            best, best_state, stale = val_mae_smooth, copy.deepcopy(model.state_dict()), 0
         else:
             stale += 1
             if stale >= cfg.patience:
