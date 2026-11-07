@@ -69,15 +69,17 @@ class DeepNTPlus(nn.Module):
         cfg = self.cfg
         A, N = g.A, g.x.size(0)
         n_ctx, n_t = ctx.numel(), tgt.numel()
+        dev = g.x.device
 
-        cnt, mean_r = torch.zeros(N), torch.zeros(N)
+        cnt = torch.zeros(N, device=dev)
+        mean_r = torch.zeros(N, device=dev)
         if cfg.context_features and n_ctx:
             Qc = g.Q[ctx]
             cnt = Qc.sum(0)
             mean_r = (Qc.T @ self._rate_z(y_ctx, g.hops[ctx])) / cnt.clamp(min=1)
         h = self.gnn(torch.cat([g.x, torch.log1p(cnt).unsqueeze(-1), mean_r.unsqueeze(-1)], -1), g.edge_index)
 
-        cov_e = A[ctx].sum(0) if n_ctx else torch.zeros(A.size(1))
+        cov_e = A[ctx].sum(0) if n_ctx else torch.zeros(A.size(1), device=dev)
         hu, hv = h[g.edge_uv[:, 0]], h[g.edge_uv[:, 1]]
         e_in = torch.cat([hu + hv, (hu - hv).abs(), g.edge_feat, torch.log1p(cov_e).unsqueeze(-1)], -1)
         x_e = F.softplus(self.edge_mlp(e_in).squeeze(-1)) * self.prior_edge_ms               # ms per edge
@@ -85,29 +87,30 @@ class DeepNTPlus(nn.Module):
 
         Z = self.path_enc(h, g.node_pad, g.node_mask)
         Zt = Z[tgt]
-        c = torch.zeros(n_t, cfg.d)
+        c = torch.zeros(n_t, cfg.d, device=dev)
         if self.temporal is not None:
-            r_ctx = self.z_of(y_ctx) if n_ctx else torch.zeros(0)
+            r_ctx = self.z_of(y_ctx) if n_ctx else torch.zeros(0, device=dev)
             c = self.temporal(Z, g.node_pad, g.node_mask, A, N, ctx, tgt, g.t[ctx], g.t[tgt], r_ctx)
 
         y_add = A[tgt] @ x_e + b
         base = torch.log1p(y_add) if cfg.tomography else self.log_rtt_mean.expand(n_t)
         y_g = torch.expm1((base + self.log_rtt_std * self.res_head(torch.cat([Zt, c], -1)).squeeze(-1)).clamp(max=12.0))
 
-        cov_p = ((A[tgt] * (cov_e > 0).float()).sum(1) / g.hops[tgt]) if n_ctx else torch.zeros(n_t)
-        lam, y_c = torch.zeros(n_t), y_g
+        cov_p = ((A[tgt] * (cov_e > 0).float()).sum(1) / g.hops[tgt]) if n_ctx else torch.zeros(n_t, device=dev)
+        lam = torch.zeros(n_t, device=dev)
+        y_c = y_g
         if cfg.convex and cfg.tomography and n_ctx:
-            Ac = torch.cat([A[ctx], torch.ones(n_ctx, 1)], 1)
+            Ac = torch.cat([A[ctx], torch.ones(n_ctx, 1, device=dev)], 1)
             ctx_rate = (y_ctx / g.hops[ctx].clamp(min=1.0)).median().clamp(min=0.1)
             scale = (ctx_rate / self.prior_edge_ms).clamp(0.2, 5.0)
             x0 = torch.cat([x_e * scale, b.view(1)])
             alpha = F.softplus(self.alpha_raw) + 1e-3
             resid = y_ctx - Ac @ x0
-            K = Ac @ Ac.T + alpha * torch.eye(n_ctx)
+            K = Ac @ Ac.T + alpha * torch.eye(n_ctx, device=dev)
             x_ref = (x0 + Ac.T @ torch.linalg.solve(K, resid)).clamp(min=0)                # min ||Ax-y||^2 + alpha ||x-x0||^2
-            y_c = torch.cat([A[tgt], torch.ones(n_t, 1)], 1) @ x_ref
+            y_c = torch.cat([A[tgt], torch.ones(n_t, 1, device=dev)], 1) @ x_ref
             rel = (resid.abs() / y_ctx.clamp(min=1)).mean()
-            gate_in = torch.stack([cov_p, torch.full((n_t,), math.log1p(n_ctx) / 5), rel.expand(n_t)], -1)
+            gate_in = torch.stack([cov_p, torch.full((n_t,), math.log1p(n_ctx) / 5, device=dev), rel.expand(n_t)], -1)
             g_res = torch.sigmoid(self.gate(gate_in).squeeze(-1))
             lam = 1.0 - g_res
             y_hat = y_c + g_res * (y_g - y_c)
@@ -115,7 +118,7 @@ class DeepNTPlus(nn.Module):
             y_hat = y_g
 
         out = {'y_hat': y_hat, 'mu_z': self.z_of(y_hat.clamp(min=0)), 'y_gnn': y_g, 'y_convex': y_c, 'lam': lam,
-               'cov': cov_p, 'y_add_ctx': (A[ctx] @ x_e + b) if n_ctx else torch.zeros(0), 'logvar': None,
+               'cov': cov_p, 'y_add_ctx': (A[ctx] @ x_e + b) if n_ctx else torch.zeros(0, device=dev), 'logvar': None,
                'loss_logit': None}
         if self.var_head is not None:
             out['logvar'] = self.var_head(torch.cat([Zt, c, cov_p.unsqueeze(-1)], -1)).squeeze(-1).clamp(-6, 3)

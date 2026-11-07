@@ -94,15 +94,37 @@ Google Colab-এ নোটবুকটি ওপেন করার পর ন�
 
 আপনি সফলভাবে রান করলে নিচের মতো মূল ফলাফলগুলো দেখতে পাবেন:
 
-1. **IPv4 (`run_03`):**
-   * **DeepNT (static, causal):** Test MAE **43.53 ± 1.04 ms** ($R^2 = 0.612$) 🥇
-   * **Convex Tomography:** Test MAE **46.28 ms**
-   * **DeepNT+ (full, improved):** Test MAE **46.65 ± 3.28 ms**
-2. **IPv4 (`run_02`):**
-   * **DeepNT+ (full, improved):** Test MAE **48.71 ± 1.91 ms** (আগের 62.62 ms থেকে সমাধানকৃত)
-   * **Convex Tomography:** Test MAE **48.37 ms**
-3. **Global IPv6 (`run_ipv6`):**
+1. **IPv4 (`run_03`, ৫টি ঘনীভূত গ্রাফ):**
+   * **DeepNT (Static + Convex Gate):** Test MAE **43.53 ± 1.04 ms** ($R^2 = 0.612$) 🥇
+   * **Convex Tomography (Tuned Ridge):** Test MAE **46.28 ms** ($R^2 = 0.606$)
+   * **DeepNT+ (Full Dynamic: Temporal + Convex):** Test MAE **46.65 ± 3.28 ms** ($R^2 = 0.595$)
+   * **GAT (Pure Spatial GNN):** Test MAE **62.30 ± 5.60 ms**
+   * **DeepNT (Neural Tomo, No Convex Gate):** Test MAE **65.17 ± 4.12 ms** (অ্যাবলেশন প্রমাণ)
+   * **Hop-count (Linear w/ Intercept):** Test MAE **78.95 ms** ($R^2 \approx -0.018$, ইন্টারসেপ্ট সহ ফিক্সড)
+   * **Median Baseline:** Test MAE **79.43 ms**
+2. **IPv4 (`run_02`, ১৫টি গ্রাফ):**
+   * **Convex Tomography (Tuned Ridge):** Test MAE **48.37 ms** ($R^2 = 0.572$)
+   * **DeepNT+ (Full Dynamic: Temporal + Convex):** Test MAE **48.71 ± 1.91 ms** (কনভেক্সের সমকক্ষ, ব্যবধান std-এর ভেতরে)
+   * **DeepNT (Static + Convex Gate):** Test MAE **48.74 ± 1.89 ms**
+   * **GAT (Pure Spatial GNN):** Test MAE **54.33 ± 6.15 ms**
+   * **DeepNT (Neural Tomo, No Convex Gate):** Test MAE **64.80 ± 3.50 ms**
+   * **Median Baseline:** Test MAE **78.16 ms**
+3. **Global IPv6 (`run_ipv6`, ৫টি গ্লোবাল গ্রাফ):**
    * **Median Baseline:** Test MAE **242.67 ms**
-   * **DeepNT (static, causal):** Test MAE **246.22 ± 0.58 ms**
-   * **DeepNT+ (full, improved):** Test MAE **246.33 ± 0.06 ms**
-   * **Convex Tomography (warm-start):** Test MAE **265.95 ms** (আগের 289.51 ms থেকে উন্নত)
+   * **Hop-count (Linear w/ Intercept):** Test MAE **242.67 ms**
+   * **DeepNT (Static + Convex Gate):** Test MAE **246.22 ± 0.58 ms**
+   * **Convex Tomography (Tuned Ridge, Warm-Start):** Test MAE **265.95 ms** (আগের 289.51 ms থেকে সমাধানকৃত)
+
+---
+
+## ৫. থিসিস মেথডোলজি ও সংশোধিত ৯টি মূল পয়েন্ট (Technical Reference)
+
+1. **আসল DeepNT+ ও Temporal Branch:** Kaggle স্ক্রিপ্টে পূর্বে সরলীকৃত ক্লাস ছিল ও সময়ের মান শূন্য ছিল (`t=0`)। এখন লাইব্রেরির আসল `DeepNTPlus` ও `TemporalBranch` সংযুক্ত করা হয়েছে এবং `measurement_time` থেকে প্রকৃত `t_hours` পার্স করা হচ্ছে।
+2. **ন্যায্য Convex Baseline:** পূর্বে Kaggle স্ক্রিপ্টে ফিক্সড $\alpha=0.01$ এবং প্রাইয়রহীন সূত্র থাকায় ফল খারাপ হয়ে 52.03 ms দেখাচ্ছিল। এখন লাইব্রেরির মতো Warm-Start Ridge ও ভ্যালিডেশন টিউনিং সহ রান_০৩-তে 46.28 ms এবং রান_০২-তে 48.37 ms ন্যায্যভাবে রিপোর্ট করা হচ্ছে।
+3. **Hop-count Intercept:** ইন্টারসেপ্ট ($\beta_0 + \beta_1 \cdot \text{hops}$) যুক্ত করায় $R^2 = -15\%$ অ্যানোমালি দূর হয়ে Median-এর স্বাভাবিক সমতুল্য হয়েছে।
+4. **হার্ডকোডেড ভ্যালু মুক্ত:** কোনো 14.0 বা 1.5 হার্ডকোড নেই; ট্রেনিং ডেটা থেকে গতিশীলভাবে `prior_edge_ms` ও রেট গণনা করা হচ্ছে।
+5. **নামকরণের স্বচ্ছতা:** `DeepNT (Neural Tomo, No Convex)` (আগে কাগলে যাকে static বলা হচ্ছিল, MAE ~65 ms) এবং `DeepNT (Static + Convex Gate)` (লাইব্রেরির static, MAE 43.5 ms)-কে স্পষ্টভাবে আলাদা করা হয়েছে।
+6. **Geo-দূরত্ব ও লিকেজ বন্ধ (`use_geo=False`):** অপূর্ণাঙ্গ lat/lon এবং সার্কুলার লিকেজ এড়াতে ডিফল্টভাবে `use_geo=False` কার্যকর। আগের 34.38/32.56 ফলকে থিসিসে আলাদা "Auxiliary Side-Information Track" হিসেবে উপস্থাপন করা হবে।
+7. **ক্যালিব্রেশন মেট্রিক সামঞ্জস্য:** `score()` এবং `reliability_curve()` উভয় স্থানে ল্যাপলাস ডিস্ট্রিবিউশন ($-b \ln(1 - L)$) সুসংগত করা হয়েছে।
+8. **GPU Graph Caching ও ৫টি সিড:** ট্রেনিং শুরুর আগে গ্রাফগুলো GPU-তে ক্যাশ করায় গতি বহুগুণ বৃদ্ধি পেয়েছে এবং সিড সংখ্যা ৫টি (`0, 1, 2, 3, 4`) করা হয়েছে।
+9. **IPv6 টাইমস্ট্যাম্প সীমাবদ্ধতা:** CAIDA Ark IPv6 ডেটাসেটের বিভিন্ন ভ্যান্টেজ পয়েন্টে সুসংগত সময়কাল না থাকায় এটি সৎভাবে স্ট্যাটিক/নন-কজাল মেথডোলজিতে মূল্যায়ন করা হয়েছে।

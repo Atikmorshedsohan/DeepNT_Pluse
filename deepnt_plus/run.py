@@ -54,11 +54,11 @@ def run_variant(name, table, graphs, norm, seed, epochs, has_loss, log=print, fa
     return model, tcfg, pd.concat(frames, ignore_index=True), hist
 
 
-def summarise(pred, by=('model', 'split')):
+def summarise(pred, by=('model', 'split'), dist='laplace'):
     """Per model/split metrics; for several seeds also the mean and std across seeds."""
     rows = []
     for keys, grp in pred.groupby(list(by) + (['seed'] if 'seed' in pred else [])):
-        rows.append({**dict(zip(list(by) + (['seed'] if 'seed' in pred else []), keys)), **score(grp)})
+        rows.append({**dict(zip(list(by) + (['seed'] if 'seed' in pred else []), keys)), **score(grp, dist=dist)})
     per_seed = pd.DataFrame(rows)
     if 'seed' not in per_seed:
         return per_seed
@@ -69,10 +69,10 @@ def summarise(pred, by=('model', 'split')):
 
 
 def run_all(processed_dir, out_dir, seeds=(0, 1, 2), epochs=150, variants=None, ablations=True,
-            active_learning=True, fast=False, holdout_monitor=None, log=print):
+            active_learning=True, fast=False, holdout_monitor=None, loss_type='laplace', use_geo=False, log=print):
     processed_dir, out_dir = Path(processed_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    graphs, norm = load_dataset(processed_dir, holdout_monitor)
+    graphs, norm = load_dataset(processed_dir, holdout_monitor, use_geo=use_geo)
     has_loss = bool(any((~torch.isnan(g.loss)).any() for g in graphs.values()))
     log(f"{len(graphs)} graphs | packet-loss labels available: {has_loss}")
 
@@ -99,19 +99,19 @@ def run_all(processed_dir, out_dir, seeds=(0, 1, 2), epochs=150, variants=None, 
 
     all_pred.to_csv(out_dir / 'predictions.csv', index=False)
     pd.concat(hists, ignore_index=True).to_csv(out_dir / 'history.csv', index=False)
-    summary = summarise(all_pred)
+    summary = summarise(all_pred, dist=loss_type)
     summary.to_csv(out_dir / 'metrics_summary.csv', index=False)
 
     if active_learning and 'DeepNT (static)' in (variants or VARIANTS):
         curves = active.run(static_model, graphs, static_cfg, split='test', mc=20)
         curves.to_csv(out_dir / 'active_learning.csv', index=False)
 
-    config = {'seeds': list(seeds), 'epochs': epochs, 'fast': fast, 'normalization': norm,
+    config = {'seeds': list(seeds), 'epochs': epochs, 'fast': fast, 'loss_type': loss_type, 'normalization': norm,
               'variants': {n: {'model': ModelConfig(node_dim=len(NODE_FEATURES), has_loss=has_loss,
                                                     **VARIANTS.get(n, ABLATIONS.get(n))[0]).to_dict(),
                                'causal': VARIANTS.get(n, ABLATIONS.get(n))[1]}
                            for n in (variants or list(VARIANTS)) + (list(ABLATIONS) if ablations else [])},
-              'train': TrainConfig(epochs=epochs).to_dict(), 'graph_split': {g.gid: g.split for g in graphs.values()},
+              'train': TrainConfig(epochs=epochs, loss_type=loss_type).to_dict(), 'graph_split': {g.gid: g.split for g in graphs.values()},
               'protocol': {'context': 'observed paths (fixed mask) at val/test; random masks per epoch in training',
                            'targets': 'hidden (observed=0) paths that are not RTT outliers',
                            'train_label_scope': TrainConfig().train_label_scope,

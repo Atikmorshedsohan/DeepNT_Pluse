@@ -60,12 +60,13 @@ def make_blocks(g, ctx, tgt, cfg):
 
 def sample_episode(g, rng, cfg):
     pool = g.ok & g.observed if cfg.train_label_scope == 'observed_only' else g.ok.clone()
-    idx = np.flatnonzero(pool.numpy())
+    idx = np.flatnonzero(pool.cpu().numpy() if isinstance(pool, torch.Tensor) else pool.numpy())
     rng.shuffle(idx)
     n_ctx = max(2, int(round(rng.uniform(*cfg.ctx_frac) * len(idx))))
     if len(idx) - n_ctx < 1:
         return None
-    return torch.tensor(np.sort(idx[:n_ctx])), torch.tensor(np.sort(idx[n_ctx:]))
+    dev = g.x.device
+    return torch.tensor(np.sort(idx[:n_ctx]), device=dev), torch.tensor(np.sort(idx[n_ctx:]), device=dev)
 
 
 def eval_episode(g):

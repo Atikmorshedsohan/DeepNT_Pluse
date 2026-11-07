@@ -40,14 +40,14 @@ def delay_prediction(pred, path, model=FULL, split='test'):
     return _save(fig, path)
 
 
-def calibration_plot(pred, path, split='test'):
+def calibration_plot(pred, path, split='test', dist='laplace'):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.plot([0, 1], [0, 1], 'k--', lw=1, label='perfect')
     for model, d in pred[pred['split'] == split].groupby('model'):
         if d['sigma_log'].notna().all():
-            lv, cov = reliability_curve(d['y_true'], d['mu_log'], d['sigma_log'])
-            ax.plot(lv, cov, marker='o', ms=3, label=model)
-    ax.set(xlabel='nominal interval level', ylabel='empirical coverage', title=f'Uncertainty calibration ({split})')
+            lv, cov = reliability_curve(d['y_true'], d['mu_log'], d['sigma_log'], dist=dist)
+            ax.plot(lv, cov, marker='o', ms=3, label=f"{model} ({dist.title()})")
+    ax.set(xlabel='nominal interval level', ylabel='empirical coverage', title=f'Uncertainty calibration ({split}, {dist.title()})')
     ax.legend(fontsize=7)
     return _save(fig, path)
 
@@ -73,13 +73,24 @@ def active_learning_plot(curves, path):
     return _save(fig, path)
 
 
-def make_all(out_dir):
+def make_all(out_dir, dist=None):
     out_dir = Path(out_dir)
     pred = pd.read_csv(out_dir / 'predictions.csv')
     summary = pd.read_csv(out_dir / 'metrics_summary.csv')
+    if dist is None:
+        dist = 'laplace'
+        cfg_file = out_dir / 'config.json'
+        if cfg_file.exists():
+            try:
+                import json
+                with open(cfg_file) as f:
+                    cfg_data = json.load(f)
+                    dist = cfg_data.get('loss_type', 'laplace')
+            except Exception:
+                dist = 'laplace'
     files = [loss_curve(pd.read_csv(out_dir / 'history.csv'), out_dir / 'loss_curve.png'),
              delay_prediction(pred, out_dir / 'delay_prediction.png'),
-             calibration_plot(pred, out_dir / 'calibration.png'),
+             calibration_plot(pred, out_dir / 'calibration.png', dist=dist),
              model_comparison(summary, out_dir / 'model_comparison.png')]
     if (out_dir / 'active_learning.csv').exists():
         files.append(active_learning_plot(pd.read_csv(out_dir / 'active_learning.csv'), out_dir / 'active_learning.png'))

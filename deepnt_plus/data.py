@@ -60,10 +60,12 @@ def leave_monitor_out(paths, holdout):
     return {g: 'test' if dom[g] == holdout else 'val' if g in val else 'train' for g in dom.index}
 
 
-def load_dataset(processed_dir, holdout_monitor=None):
+def load_dataset(processed_dir, holdout_monitor=None, use_geo=False):
     """Returns ({graph_id: GraphData}, normalisation dict). All statistics come from the train graphs only.
     holdout_monitor: optional Ark monitor id (e.g. 'dac-bd') to run a leave-one-vantage-point-out split instead of
-    the split stored in the dataset files."""
+    the split stored in the dataset files.
+    use_geo: whether to load geo_distance_km as an edge feature. Defaults to False to prevent silent
+    leakage when lat/lon coordinates are unverified or noisy."""
     proc = Path(processed_dir)
     nodes = pd.read_csv(proc / 'node_features.csv', dtype={'graph_id': str, 'node_id': str})
     edges = pd.read_csv(proc / 'edge_features.csv', dtype={'graph_id': str, 'edge_id': str, 'src': str, 'dst': str})
@@ -90,7 +92,7 @@ def load_dataset(processed_dir, holdout_monitor=None):
     train_edges = edge_log[edges['graph_id'].map(split_of) == 'train']
     edge_stats = (float(train_edges.mean()), float(train_edges.std() or 1.0))
 
-    has_geo = 'geo_distance_km' in edges.columns and edges['geo_distance_km'].notna().any()
+    has_geo = bool(use_geo and ('geo_distance_km' in edges.columns and edges['geo_distance_km'].notna().any()))
     if has_geo:
         geo_log = np.log1p(edges['geo_distance_km'].astype(float).clip(lower=0))
         train_geo = geo_log[edges['graph_id'].map(split_of) == 'train']
@@ -143,15 +145,15 @@ def load_dataset(processed_dir, holdout_monitor=None):
             monitor=list(pf['monitor_id']), loss=torch.tensor(loss, dtype=torch.float32))
 
     tr = [g for g in graphs.values() if g.split == 'train']
-    y = torch.cat([g.y[g.ok] for g in tr])
-    hops = torch.cat([g.hops[g.ok] for g in tr])
+    y = torch.cat([g.y[g.ok & g.observed] for g in tr])
+    hops = torch.cat([g.hops[g.ok & g.observed] for g in tr])
     log_y = torch.log1p(y)
-    rate = torch.log1p(y / hops)
+    rate = torch.log1p(y / hops.clamp(min=1.0))
     norm = {
         'fit_on': 'train graphs only',
-        'log_rtt_mean': float(log_y.mean()), 'log_rtt_std': float(log_y.std()),
-        'rate_mean': float(rate.mean()), 'rate_std': float(rate.std()),
-        'prior_edge_ms': float((y / hops).median()),
+        'log_rtt_mean': float(log_y.mean()), 'log_rtt_std': float(log_y.std() or 1.0),
+        'rate_mean': float(rate.mean()), 'rate_std': float(rate.std() or 1.0),
+        'prior_edge_ms': float((y / hops.clamp(min=1.0)).median().clamp(min=1.0)),
         'node_stats': node_stats, 'edge_stats': edge_stats,
         'edge_dim': 2 if has_geo else 1,
     }
