@@ -61,9 +61,10 @@ def load_authentic_graphs(proc_dir, use_geo=False):
     paths = pd.read_csv(proc / 'paths_all.csv', dtype={'graph_id': str, 'path_id': str}, keep_default_na=False)
     truth = pd.read_csv(proc / 'path_ground_truth.csv', dtype={'path_id': str}, keep_default_na=False).set_index('path_id')
 
-    # Parse authentic timestamps from measurement_time UTC
+    # Parse authentic timestamps from measurement_time UTC (reject synthetic 2026-01-01 placeholders in IPv6)
     t_all = pd.to_datetime(paths['measurement_time'].replace('', np.nan), errors='coerce', utc=True)
-    has_real_timestamps = bool(t_all.notna().any() and (t_all.max() > t_all.min()))
+    is_synthetic_ts = bool(t_all.notna().any() and (t_all.min().year == 2026 and t_all.min().month == 1 and t_all.min().day == 1))
+    has_real_timestamps = bool(t_all.notna().any() and (t_all.max() > t_all.min()) and not is_synthetic_ts)
     if has_real_timestamps:
         t0 = t_all.min()
         paths['t_hours'] = (t_all - t0).dt.total_seconds() / 3600.0
@@ -432,9 +433,10 @@ def train_and_eval_authentic(graphs_cached, norm, model_name='DeepNT+ (Full Dyna
 # 7. Execute Authentic Benchmark Suite
 def main():
     datasets = [
+        ('IPv4 (10-Graphs, New)', found_root / 'data' / 'ipv4_10graphs'),
+        ('IPv6 (10-Graphs, New)', found_root / 'data' / 'ipv6_10graphs'),
         ('IPv4 (run_03, Dense)', found_root / 'data' / 'processed'),
         ('IPv4 (run_02, 15-Graphs)', found_root / 'data' / 'processed_15graphs_backup'),
-        ('IPv6 (Global Ark)', found_root / 'data' / 'ipv6')
     ]
 
     summary_rows = []
@@ -443,6 +445,9 @@ def main():
     EVAL_SEEDS = [0, 1, 2, 3, 4]  # 5-seed academic standard
 
     for name, path in datasets:
+        if not path.exists():
+            print(f"⚠️ Skipping {name}: path {path} not found")
+            continue
         print(f"\n{'='*75}")
         print(f"🌟 EVALUATING AUTHENTIC (LEAKAGE-FREE) DATASET: {name}")
         print(f"{'='*75}")
@@ -517,14 +522,10 @@ def main():
         else:
             best_for_plots = res_static_conv
 
-        if name.startswith('IPv4 (run_03'):
-            scatter_records['run_03'] = (best_for_plots['trues'], best_for_plots['preds'], conv_res['MAE'])
-            calibration_records['run_03'] = (best_for_plots['trues'], best_for_plots['preds'], best_for_plots['sigmas'])
-        if name.startswith('IPv4 (run_02'):
-            scatter_records['run_02'] = (best_for_plots['trues'], best_for_plots['preds'], conv_res['MAE'])
-            calibration_records['run_02'] = (best_for_plots['trues'], best_for_plots['preds'], best_for_plots['sigmas'])
+        scatter_records[name] = (best_for_plots['trues'], best_for_plots['preds'], conv_res['MAE'])
+        calibration_records[name] = (best_for_plots['trues'], best_for_plots['preds'], best_for_plots['sigmas'])
 
-    out_dir = Path("/kaggle/working")
+    out_dir = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path("results_10graphs_benchmark")
     out_dir.mkdir(parents=True, exist_ok=True)
     df_sum = pd.DataFrame(summary_rows)
     df_sum.to_csv(out_dir / "authentic_master_benchmark_summary.csv", index=False)
@@ -538,44 +539,52 @@ def main():
     # 8. Visual Plots
     print("\n🎨 Generating 100% authentic publication-quality charts...")
 
-    # Figure 1: Authentic Master Comparison Bar Chart
-    fig, axes = plt.subplots(1, 2, figsize=(16, 5.5))
-    for idx, d_name in enumerate(['IPv4 (run_03, Dense)', 'IPv4 (run_02, 15-Graphs)']):
-        sub = df_sum[df_sum['Dataset'] == d_name]
-        mods = sub['Model'].tolist()
-        maes = sub['MAE'].tolist()
-        stds = sub['MAE_std'].tolist()
-        x = np.arange(len(mods))
-        colors = ['#bdc3c7', '#95a5a6', '#7f8c8d', '#e67e22', '#3498db', '#9b59b6', '#2ecc71', '#1abc9c'][:len(mods)]
+    # Figure 1: Authentic Master Comparison Bar Chart (10-Graphs IPv4 & IPv6)
+    plot_datasets = [d for d in ['IPv4 (10-Graphs, New)', 'IPv6 (10-Graphs, New)'] if d in df_sum['Dataset'].values]
+    if plot_datasets:
+        fig, axes = plt.subplots(1, len(plot_datasets), figsize=(16, 5.5))
+        if len(plot_datasets) == 1:
+            axes = [axes]
+        for idx, d_name in enumerate(plot_datasets):
+            sub = df_sum[df_sum['Dataset'] == d_name]
+            mods = sub['Model'].tolist()
+            maes = sub['MAE'].tolist()
+            stds = sub['MAE_std'].tolist()
+            x = np.arange(len(mods))
+            colors = ['#bdc3c7', '#95a5a6', '#7f8c8d', '#e67e22', '#3498db', '#9b59b6', '#2ecc71', '#1abc9c'][:len(mods)]
 
-        axes[idx].bar(x, maes, yerr=stds, capsize=5, color=colors, edgecolor='black', linewidth=1.2, width=0.55)
-        axes[idx].set_title(f'{d_name} - Authentic Test MAE', fontsize=12, fontweight='bold', pad=10)
-        axes[idx].set_ylabel('MAE (ms) [Lower is Better]', fontsize=11)
-        axes[idx].set_xticks(x)
-        axes[idx].set_xticklabels(mods, rotation=30, ha='right', fontsize=8.5)
-        axes[idx].grid(axis='y', linestyle='--', alpha=0.5)
-        for i, (m, s) in enumerate(zip(maes, stds)):
-            txt = f"{m:.1f}" if s == 0 else f"{m:.1f}±{s:.1f}"
-            axes[idx].text(i, m + s + 1.2, txt, ha='center', fontweight='bold', fontsize=8.5)
+            axes[idx].bar(x, maes, yerr=stds, capsize=5, color=colors, edgecolor='black', linewidth=1.2, width=0.55)
+            axes[idx].set_title(f'{d_name} - Authentic Test MAE', fontsize=12, fontweight='bold', pad=10)
+            axes[idx].set_ylabel('MAE (ms) [Lower is Better]', fontsize=11)
+            axes[idx].set_xticks(x)
+            axes[idx].set_xticklabels(mods, rotation=30, ha='right', fontsize=8.5)
+            axes[idx].grid(axis='y', linestyle='--', alpha=0.5)
+            for i, (m, s) in enumerate(zip(maes, stds)):
+                txt = f"{m:.1f}" if s == 0 else f"{m:.1f}±{s:.1f}"
+                axes[idx].text(i, m + s + 1.2, txt, ha='center', fontweight='bold', fontsize=8.5)
 
-    plt.tight_layout()
-    fig.savefig(out_dir / "authentic_master_comparison.png", dpi=300)
-    plt.close(fig)
-    print("✅ Saved authentic_master_comparison.png")
+        plt.tight_layout()
+        fig.savefig(out_dir / "authentic_10graphs_comparison.png", dpi=300)
+        fig.savefig(out_dir / "authentic_master_comparison.png", dpi=300)
+        plt.close(fig)
+        print("✅ Saved authentic_10graphs_comparison.png")
 
-    # Figure 2: Actual vs Predicted Delay Scatter
-    if 'run_03' in scatter_records or 'run_02' in scatter_records:
-        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-        for idx, (k_name, title) in enumerate([('run_03', 'IPv4 Dense (run_03)'), ('run_02', 'IPv4 Balanced 15-Graphs (run_02)')]):
-            if k_name in scatter_records:
-                yt, yp, _ = scatter_records[k_name]
+    # Figure 2: Actual vs Predicted Delay Scatter (10-Graphs)
+    if plot_datasets:
+        fig, axes = plt.subplots(1, len(plot_datasets), figsize=(14, 6))
+        if len(plot_datasets) == 1:
+            axes = [axes]
+        for idx, d_name in enumerate(plot_datasets):
+            if d_name in scatter_records:
+                yt, yp, _ = scatter_records[d_name]
+                max_v = max(450, float(np.percentile(yt, 98)) * 1.1)
                 axes[idx].scatter(yt, yp, alpha=0.45, color='#2980b9', edgecolors='none', s=35)
-                axes[idx].plot([0, 450], [0, 450], 'r--', linewidth=2, label='Ideal y = x')
-                axes[idx].set_title(f'Authentic DeepNT+: {title}', fontsize=12, fontweight='bold')
+                axes[idx].plot([0, max_v], [0, max_v], 'r--', linewidth=2, label='Ideal y = x')
+                axes[idx].set_title(f'Authentic DeepNT+: {d_name}', fontsize=12, fontweight='bold')
                 axes[idx].set_xlabel('Ground Truth RTT (ms)', fontsize=11)
                 axes[idx].set_ylabel('Predicted RTT (ms)', fontsize=11)
-                axes[idx].set_xlim(0, 450)
-                axes[idx].set_ylim(0, 450)
+                axes[idx].set_xlim(0, max_v)
+                axes[idx].set_ylim(0, max_v)
                 axes[idx].grid(True, linestyle='--', alpha=0.5)
                 axes[idx].legend(fontsize=11)
 
@@ -585,9 +594,10 @@ def main():
         print("✅ Saved authentic_delay_scatter.png")
 
     # Figure 3: Authentic Laplace Uncertainty Calibration
-    if 'run_02' in calibration_records:
+    calib_key = 'IPv4 (10-Graphs, New)' if 'IPv4 (10-Graphs, New)' in calibration_records else next(iter(calibration_records), None)
+    if calib_key and calibration_records[calib_key][2]:
         fig, ax = plt.subplots(figsize=(7, 6))
-        yt, yp, sigs = calibration_records['run_02']
+        yt, yp, sigs = calibration_records[calib_key]
         z = np.log1p(np.array(yt))
         mu = np.log1p(np.clip(np.array(yp), 0, None))
         b = np.array(sigs) / np.sqrt(2.0)
@@ -597,7 +607,7 @@ def main():
         emp = [np.mean(np.abs(z - mu) <= -b * np.log(1 - l)) * 100 for l in levels]
 
         ax.plot([40, 100], [40, 100], 'k--', linewidth=2, label='Perfect Calibration (Diagonal)')
-        ax.plot(nominal, emp, 'o-', color='#27ae60', linewidth=2.5, markersize=8, label='DeepNT+ Authentic Laplace Coverage')
+        ax.plot(nominal, emp, 'o-', color='#27ae60', linewidth=2.5, markersize=8, label=f'DeepNT+ Laplace Coverage ({calib_key})')
         for nom, val in zip(nominal, emp):
             ax.annotate(f"{val:.1f}%", (nom, val), textcoords="offset points", xytext=(-10, 10), fontweight='bold', color='#27ae60')
 
