@@ -20,6 +20,7 @@ import scipy.sparse as sp
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
+from scripts.geo_utils import compute_ipv4_and_ipv6_node_geo, enrich_dataset_dir, haversine_km
 SRC_IPV4 = BASE_DIR / "kaggle_staging" / "data" / "processed_15graphs_backup"
 SRC_IPV6 = BASE_DIR / "kaggle_staging" / "data" / "ipv6"
 
@@ -42,7 +43,8 @@ SPLIT_10 = {
     'graph_09': 'test',  'graph_10': 'test'
 }
 
-def build_protocol_10_graphs(name, paths_src, gt_src, graph_allocations, out_dir, sync_dir=None):
+def build_protocol_10_graphs(name, paths_src, gt_src, graph_allocations, out_dir, sync_dir=None, node_geo=None):
+    node_geo = node_geo or {}
     print("\n" + "=" * 80)
     print(f"🚀 GENERATING 10 {name} GRAPHS (graph_01 to graph_10)")
     print("=" * 80)
@@ -131,13 +133,14 @@ def build_protocol_10_graphs(name, paths_src, gt_src, graph_allocations, out_dir
         bet = nx.betweenness_centrality(G, k=min(n, 200), seed=SEED)
         
         for node in G:
+            cc, lat, lon = node_geo.get(str(node), (pd.NA, np.nan, np.nan))
             node_rows.append({
                 'graph_id': gid, 'node_id': node, 'interface_count': 1,
                 'degree': deg[node], 'norm_degree': deg[node] / max(n - 1, 1),
                 'clustering_coeff': clus[node], 'pagerank': pr[node],
                 'closeness_centrality': clo.get(node, np.nan),
                 'betweenness_centrality': bet[node], 'k_core': core[node],
-                'asn': pd.NA, 'country': pd.NA, 'latitude': np.nan, 'longitude': np.nan
+                'asn': pd.NA, 'country': cc if cc else pd.NA, 'latitude': lat, 'longitude': lon
             })
     node_features_df = pd.DataFrame(node_rows)
     
@@ -151,10 +154,13 @@ def build_protocol_10_graphs(name, paths_src, gt_src, graph_allocations, out_dir
         G = graphs_nx[gid]
         for _, _, d in sorted(G.edges(data=True), key=lambda x: x[2]['edge_id']):
             parts = d['edge_id'].split('-')
+            _, lat1, lon1 = node_geo.get(str(parts[0]), (None, np.nan, np.nan))
+            _, lat2, lon2 = node_geo.get(str(parts[1]), (None, np.nan, np.nan))
             edge_rows.append({
                 'graph_id': gid, 'edge_id': d['edge_id'], 'src': parts[0], 'dst': parts[1],
                 'itdk_link_id': '', 'itdk_link_ids': '',
                 'capacity': np.nan, 'utilization': np.nan, 'base_delay': np.nan, 'loss_rate': np.nan,
+                'geo_distance_km': haversine_km(lat1, lon1, lat2, lon2),
                 'path_count_all': d['path_count'],
                 'observed_measurement_count': obs_counts[(gid, d['edge_id'])],
             })
@@ -238,7 +244,16 @@ def build_protocol_10_graphs(name, paths_src, gt_src, graph_allocations, out_dir
 
 def main():
     t0 = time.time()
-    
+
+    print("=" * 80)
+    print("0. RESOLVING IPv4 & IPv6 GEOLOCATION FROM GeoLite2-City-CSV_20261110")
+    print("=" * 80)
+    v4_node_geo, v6_node_geo = compute_ipv4_and_ipv6_node_geo(
+        ipv4_paths_dirs=[SRC_IPV4, BASE_DIR / "kaggle_staging" / "data" / "processed"],
+        ipv6_node_dirs=[SRC_IPV6],
+    )
+    print(f"Resolved IPv4 nodes: {len(v4_node_geo):,}, IPv6 nodes: {len(v6_node_geo):,}")
+
     # --- PART 1: IPv4 10 GRAPHS ---
     print("\n" + "=" * 80)
     print("1. LOADING & PARTITIONING IPv4 PATHS INTO 10 BALANCED GRAPHS")
@@ -277,7 +292,7 @@ def main():
     allocations_v4['graph_09'].extend(acc_splits[1])
     allocations_v4['graph_10'].extend(acc_splits[2])
     
-    build_protocol_10_graphs("IPv4", paths_v4, gt_v4, allocations_v4, OUT_IPV4, SYNC_IPV4)
+    build_protocol_10_graphs("IPv4", paths_v4, gt_v4, allocations_v4, OUT_IPV4, SYNC_IPV4, node_geo=v4_node_geo)
     
     # --- PART 2: IPv6 10 GRAPHS ---
     print("\n" + "=" * 80)
@@ -310,23 +325,59 @@ def main():
         allocations_v6[g_a].extend(p_a)
         allocations_v6[g_b].extend(p_b)
         
-    build_protocol_10_graphs("IPv6", paths_v6, gt_v6, allocations_v6, OUT_IPV6, SYNC_IPV6)
-    
+    build_protocol_10_graphs("IPv6", paths_v6, gt_v6, allocations_v6, OUT_IPV6, SYNC_IPV6, node_geo=v6_node_geo)
+
+    # --- PART 2B: ENRICH EXISTING DATASETS WITH GeoLite2 METADATA ---
+    print("\n" + "=" * 80)
+    print("2B. ENRICHING EXISTING DATASETS (processed, backup, ipv6) WITH GeoLite2")
+    print("=" * 80)
+    extra_targets = [
+        (BASE_DIR / "kaggle_staging" / "data" / "processed", v4_node_geo),
+        (BASE_DIR / "kaggle_staging" / "data" / "processed_15graphs_backup", v4_node_geo),
+        (BASE_DIR / "kaggle_staging" / "data" / "ipv6", v6_node_geo),
+        (THESIS_DIR.parent / "data" / "processed", v4_node_geo),
+        (THESIS_DIR.parent / "data" / "processed_15graphs_backup", v4_node_geo),
+        (THESIS_DIR / "ipv4", v4_node_geo),
+        (THESIS_DIR / "ipv6", v6_node_geo),
+    ]
+    for target_dir, geo_map in extra_targets:
+        if (target_dir / "node_features.csv").exists() and (target_dir / "edge_features.csv").exists():
+            st = enrich_dataset_dir(target_dir, geo_map)
+            print(
+                f"  {st['dir']}: country={st['country_pct']:.1f}%, "
+                f"latlon={st['latlon_pct']:.1f}%, geo_edges={st['geo_edge_pct']:.1f}%, "
+                f"median_km={st['median_km']:.1f}"
+            )
+
     # --- PART 3: TEST WITH NATIVE DeepNT+ LOADER ---
     print("\n" + "=" * 80)
-    print("3. VERIFYING BOTH DATASETS WITH NATIVE DeepNT+ LOADER")
+    print("3. VERIFYING BOTH DATASETS WITH NATIVE DeepNT+ LOADER (use_geo=False & True)")
     print("=" * 80)
     from deepnt_plus.data import load_dataset, describe
     
-    print("\n--- Verifying IPv4 10-Graph Dataset ---")
+    print("\n--- Verifying IPv4 10-Graph Dataset (use_geo=False) ---")
     graphs_v4, norm_v4 = load_dataset(OUT_IPV4, use_geo=False)
     desc_v4 = describe(graphs_v4)
     print(desc_v4.to_string(index=False))
+
+    print("\n--- Verifying IPv4 10-Graph Dataset (use_geo=True) ---")
+    graphs_v4_geo, norm_v4_geo = load_dataset(OUT_IPV4, use_geo=True)
+    assert norm_v4_geo['edge_dim'] == 2, f"Expected edge_dim=2, got {norm_v4_geo['edge_dim']}"
+    for gid, g in graphs_v4_geo.items():
+        assert np.isfinite(g.x.numpy()).all(), f"Non-finite node feats in {gid}"
+        assert np.isfinite(g.edge_feat.numpy()).all(), f"Non-finite edge feats in {gid}"
     
-    print("\n--- Verifying IPv6 10-Graph Dataset ---")
+    print("\n--- Verifying IPv6 10-Graph Dataset (use_geo=False) ---")
     graphs_v6, norm_v6 = load_dataset(OUT_IPV6, use_geo=False)
     desc_v6 = describe(graphs_v6)
     print(desc_v6.to_string(index=False))
+
+    print("\n--- Verifying IPv6 10-Graph Dataset (use_geo=True) ---")
+    graphs_v6_geo, norm_v6_geo = load_dataset(OUT_IPV6, use_geo=True)
+    assert norm_v6_geo['edge_dim'] == 2, f"Expected edge_dim=2, got {norm_v6_geo['edge_dim']}"
+    for gid, g in graphs_v6_geo.items():
+        assert np.isfinite(g.x.numpy()).all(), f"Non-finite node feats in {gid}"
+        assert np.isfinite(g.edge_feat.numpy()).all(), f"Non-finite edge feats in {gid}"
     
     print("\n" + "=" * 80)
     print(f"🎉 SUCCESS! All 10 IPv4 Graphs and 10 IPv6 Graphs generated and verified in {time.time() - t0:.1f}s.")

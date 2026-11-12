@@ -92,7 +92,12 @@ def load_authentic_graphs(proc_dir, use_geo=False):
     if has_geo:
         geo_log = np.log1p(edges['geo_distance_km'].astype(float).clip(lower=0))
         train_geo = geo_log[edges['graph_id'].map(split_of) == 'train']
-        geo_stats = (float(train_geo.mean()), float(train_geo.std() or 1.0))
+        if train_geo.notna().any():
+            geo_mean = float(train_geo.mean())
+            geo_std = float(train_geo.std())
+            geo_stats = (geo_mean, geo_std if geo_std > 0 else 1.0)
+        else:
+            geo_stats = (0.0, 1.0)
 
     graphs = {}
     for gid in graph_ids:
@@ -107,7 +112,10 @@ def load_authentic_graphs(proc_dir, use_geo=False):
 
         feat_count = data._standardise(np.log1p(ef['path_count_all'].astype(float)).to_numpy(), *edge_stats)
         if has_geo:
-            feat_geo = data._standardise(np.log1p(ef['geo_distance_km'].astype(float).clip(lower=0)).to_numpy(), *geo_stats)
+            feat_geo = data._standardise(
+                np.log1p(ef['geo_distance_km'].astype(float).clip(lower=0)).fillna(geo_stats[0]).to_numpy(),
+                *geo_stats,
+            )
             e_feat = np.stack([feat_count, feat_geo], axis=1)
         else:
             e_feat = feat_count[:, None]  # shape: [E, 1]
