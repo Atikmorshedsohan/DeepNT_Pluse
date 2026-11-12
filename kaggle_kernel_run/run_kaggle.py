@@ -441,10 +441,12 @@ def train_and_eval_authentic(graphs_cached, norm, model_name='DeepNT+ (Full Dyna
 # 7. Execute Authentic Benchmark Suite
 def main():
     datasets = [
-        ('IPv4 (10-Graphs, New)', found_root / 'data' / 'ipv4_10graphs'),
-        ('IPv6 (10-Graphs, New)', found_root / 'data' / 'ipv6_10graphs'),
-        ('IPv4 (run_03, Dense)', found_root / 'data' / 'processed'),
-        ('IPv4 (run_02, 15-Graphs)', found_root / 'data' / 'processed_15graphs_backup'),
+        ('IPv4 (10-Graphs, GeoLite2)', found_root / 'data' / 'ipv4_10graphs', True),
+        ('IPv4 (10-Graphs, Pure)', found_root / 'data' / 'ipv4_10graphs', False),
+        ('IPv6 (10-Graphs, GeoLite2)', found_root / 'data' / 'ipv6_10graphs', True),
+        ('IPv6 (10-Graphs, Pure)', found_root / 'data' / 'ipv6_10graphs', False),
+        ('IPv4 (run_03, Dense)', found_root / 'data' / 'processed', False),
+        ('IPv4 (run_02, 15-Graphs)', found_root / 'data' / 'processed_15graphs_backup', False),
     ]
 
     summary_rows = []
@@ -452,15 +454,17 @@ def main():
     calibration_records = {}
     EVAL_SEEDS = [0, 1, 2, 3, 4]  # 5-seed academic standard
 
-    for name, path in datasets:
+    for name, path, use_geo in datasets:
         if not path.exists():
             print(f"⚠️ Skipping {name}: path {path} not found")
             continue
+        track_label = "GeoLite2 Side-Information Track (use_geo=True)" if use_geo else "Pure Structural Zero-Geo Track (use_geo=False)"
         print(f"\n{'='*75}")
-        print(f"🌟 EVALUATING AUTHENTIC (LEAKAGE-FREE) DATASET: {name}")
+        print(f"🌟 EVALUATING DATASET: {name} | {track_label}")
         print(f"{'='*75}")
 
-        graphs, norm = load_authentic_graphs(path, use_geo=False)
+        graphs, norm = load_authentic_graphs(path, use_geo=use_geo)
+        print(f"   edge_dim={norm['edge_dim']} | has_real_timestamps={norm['has_real_timestamps']}")
         graphs_cached = cache_graphs_on_device(graphs, device)
         has_temporal = norm.get('has_real_timestamps', False)
 
@@ -547,8 +551,10 @@ def main():
     # 8. Visual Plots
     print("\n🎨 Generating 100% authentic publication-quality charts...")
 
-    # Figure 1: Authentic Master Comparison Bar Chart (10-Graphs IPv4 & IPv6)
-    plot_datasets = [d for d in ['IPv4 (10-Graphs, New)', 'IPv6 (10-Graphs, New)'] if d in df_sum['Dataset'].values]
+    # Figure 1: Authentic Master Comparison Bar Chart (10-Graphs IPv4 & IPv6, GeoLite2)
+    plot_datasets = [d for d in ['IPv4 (10-Graphs, GeoLite2)', 'IPv6 (10-Graphs, GeoLite2)'] if d in df_sum['Dataset'].values]
+    if not plot_datasets:
+        plot_datasets = [d for d in ['IPv4 (10-Graphs, Pure)', 'IPv6 (10-Graphs, Pure)'] if d in df_sum['Dataset'].values]
     if plot_datasets:
         fig, axes = plt.subplots(1, len(plot_datasets), figsize=(16, 5.5))
         if len(plot_datasets) == 1:
@@ -602,7 +608,7 @@ def main():
         print("✅ Saved authentic_delay_scatter.png")
 
     # Figure 3: Authentic Laplace Uncertainty Calibration
-    calib_key = 'IPv4 (10-Graphs, New)' if 'IPv4 (10-Graphs, New)' in calibration_records else next(iter(calibration_records), None)
+    calib_key = 'IPv4 (10-Graphs, GeoLite2)' if 'IPv4 (10-Graphs, GeoLite2)' in calibration_records else next(iter(calibration_records), None)
     if calib_key and calibration_records[calib_key][2]:
         fig, ax = plt.subplots(figsize=(7, 6))
         yt, yp, sigs = calibration_records[calib_key]
