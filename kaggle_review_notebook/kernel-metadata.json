@@ -1,0 +1,17 @@
+{
+  "id": "atikmorshedsohan/deepnt-plus-review-and-benchmark",
+  "title": "DeepNT Plus Review and Benchmark",
+  "code_file": "deepnt_plus_review.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "false",
+  "enable_gpu": "false",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "atikmorshedsohan/deepnt-plus-network-tomography-suite"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
