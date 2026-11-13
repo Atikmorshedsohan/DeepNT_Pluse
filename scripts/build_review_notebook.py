@@ -263,5 +263,14 @@ Atikmorshed Sohan — *Neural Network Tomography with Dynamic Hybrid Convex Rout
     nbf.write(nb, str(out_nb))
     print(f"✅ Successfully written notebook with {len(nb.cells)} cells to {out_nb}")
 
+    # Automatically execute notebook cells to embed outputs
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from execute_review_notebook import execute_notebook
+        execute_notebook()
+    except Exception as e:
+        print(f"Note: execution step skipped ({e})")
+
 if __name__ == "__main__":
     build_notebook()

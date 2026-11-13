@@ -9,3 +9,6 @@ venv/
 kaggle_staging/
 results_gap_bridging/
 kaggle_output_10graphs/
+kaggle_output_geolite2/
+kaggle_review_output/
+tmp*/

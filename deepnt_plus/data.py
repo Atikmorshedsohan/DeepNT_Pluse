@@ -72,9 +72,15 @@ def load_dataset(processed_dir, holdout_monitor=None, use_geo=False):
     paths = pd.read_csv(proc / 'paths_all.csv', dtype={'graph_id': str, 'path_id': str}, keep_default_na=False)
     truth = pd.read_csv(proc / 'path_ground_truth.csv', dtype={'path_id': str}, keep_default_na=False).set_index('path_id')
 
+    # Parse authentic timestamps from measurement_time UTC (reject synthetic 2026-01-01 placeholders in IPv6)
     t_all = pd.to_datetime(paths['measurement_time'].replace('', np.nan), errors='coerce', utc=True)
-    t0 = t_all.min()
-    paths['t_hours'] = (t_all - t0).dt.total_seconds() / 3600.0
+    is_synthetic_ts = bool(t_all.notna().any() and (t_all.min().year == 2026 and t_all.min().month == 1 and t_all.min().day == 1))
+    has_real_timestamps = bool(t_all.notna().any() and (t_all.max() > t_all.min()) and not is_synthetic_ts)
+    if has_real_timestamps:
+        t0 = t_all.min()
+        paths['t_hours'] = (t_all - t0).dt.total_seconds() / 3600.0
+    else:
+        paths['t_hours'] = 0.0
 
     split_of = paths.groupby('graph_id')['split'].first().to_dict()
     if holdout_monitor is not None:
@@ -164,6 +170,7 @@ def load_dataset(processed_dir, holdout_monitor=None, use_geo=False):
         'prior_edge_ms': float((y / hops.clamp(min=1.0)).median().clamp(min=1.0)),
         'node_stats': node_stats, 'edge_stats': edge_stats,
         'edge_dim': 2 if has_geo else 1,
+        'has_real_timestamps': has_real_timestamps,
     }
     return graphs, norm
 

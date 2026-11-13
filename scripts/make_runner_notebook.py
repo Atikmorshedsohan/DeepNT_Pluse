@@ -34,7 +34,7 @@ This notebook contains the complete GPU execution script used to produce the mas
 
     # Read log text
     log_text = ""
-    log_file = Path("kaggle_output_geolite2/deepnt-model-benchmark-suite.log")
+    log_file = Path("benchmark_results/deepnt-model-benchmark-suite.log")
     if log_file.exists():
         try:
             raw = log_file.read_text(encoding="utf-8")
@@ -60,12 +60,12 @@ This notebook contains the complete GPU execution script used to produce the mas
 from pathlib import Path
 from IPython.display import display
 
-df = pd.read_csv('kaggle_output_geolite2/authentic_master_benchmark_summary.csv')
+df = pd.read_csv('benchmark_results/authentic_master_benchmark_summary.csv')
 display(df[['Dataset', 'Model', 'Family', 'MAE', 'MAE_std', 'R2', 'Cov90', 'ECE']].round(3))"""
 
     c4 = nbf.v4.new_code_cell(summary_code)
     c4["execution_count"] = 2
-    df_sum = pd.read_csv("kaggle_output_geolite2/authentic_master_benchmark_summary.csv")
+    df_sum = pd.read_csv("benchmark_results/authentic_master_benchmark_summary.csv")
     c4.outputs = [nbf.v4.new_output(
         output_type="execute_result",
         execution_count=2,
